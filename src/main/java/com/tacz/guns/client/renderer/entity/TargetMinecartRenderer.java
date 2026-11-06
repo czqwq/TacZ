@@ -124,13 +124,14 @@ public class TargetMinecartRenderer extends RenderMinecart {
         head2Model.visible = false;
 
         stack.pushPose();
-        // 坐标换算（1.20 帧 → 1.7.10 帧）。上游那 4 行是在 1.20 的装载物帧里写的：
-        // pre120 = T(0,0.375,0)·S(0.75)·T(-0.5,-0.125,0.5)·Ry(90) [MinecartRenderer.java:69,87-89]，偏移 k=6
-        // 1.7.10 的装载物帧只有 pre107 = S(0.75)·T(0,6/16,0) [RenderMinecart.java:105-109]。
-        // 右乘 pre107 的逆即得 1.7.10 帧下的等价内层：T(-0.5,0,0.5)·Ry(90)·T(0.5,1.875,0.5)·S(1.5)·Rz(180)·Ry(-90)
-        // （因 S⁻¹·T(0,0.375,0)·S = T(0,0.5,0)，与 T(0,-6/16,0) 相消）
-        // 平移项相消 + 均匀缩放与旋转可交换 + Ry(90)·Rz(180)·Ry(-90) = Rx(180) ⇒ T(0,1.875,0)·S(1.5)·Rx(180)。
-        stack.translate(0, 1.875, 0);
+        // 坐标换算（1.20 帧 → 1.7.10 帧）。上游那 4 行写在 1.20 的装载物帧里：
+        // pre120 = T(0,0.375,0)·S(0.75)·T(-0.5,k/16-0.5,0.5)·Ry(90)（MinecartRenderer.java:69,87-89，k=6），
+        // 1.7.10 的装载物帧只有 pre107 = S(0.75)·T(0,6/16,0)（RenderMinecart.java:105-109）。
+        // pre107⁻¹·pre120 = T(-0.5,0,0.5)·Ry(90)，与 inner120 合成后化简为 T(0,1.875,0)·S(1.5)·Rx(180)。
+        // 再减掉**帧原点高度差** 0.4375：平直轨道上 1.7.10 帧原点 = 轨道 y+0.5（func_70489_a:815 给 j+0.5），
+        // 1.20 = 轨道 y+0.0625（AbstractMinecart:640）⇒ 1.875-0.4375 = 1.4375 才是上游的世界坐标高度
+        // （模型脚底落在轨道面上，而不是浮空 0.44 格）。
+        stack.translate(0, 1.4375, 0);
         stack.scale(1.5f, 1.5f, 1.5f);
         stack.mulPose(Axis.XP.rotationDegrees(180));
         RenderType renderType = RenderType.entityTranslucent(InternalAssetLoader.TARGET_MINECART_TEXTURE_LOCATION);

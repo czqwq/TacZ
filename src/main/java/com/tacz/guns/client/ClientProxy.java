@@ -184,6 +184,11 @@ public class ClientProxy extends CommonProxy {
         // 并在每次重载前由监听器重挂（见 GunPackResourcePack 的重载钩子）。
         // 数据来源已就绪：super.preInit → CommonProxy.preInit 里已调 GunPackLoader.INSTANCE.reloadPackList()。
         GunPackResourcePack.ensureInstalled();
+
+        // 4) GTNHLib JSON 模型系统：登记本模组的 modid，允许它在资源重载时扫描本模组 jar 的
+        // blockstates/models 并把模型引用到的贴图注册进方块图集（com.gtnewhorizon.gtnhlib.client.model）。
+        // 必须早于第一次资源重载的模型扫描（preInit 早于 FMLClientHandler.finishMinecraftLoading 的 refreshResources）。
+        com.gtnewhorizon.gtnhlib.client.model.loading.ModelRegistry.registerModid(com.tacz.guns.GunMod.MOD_ID);
     }
 
     @Override

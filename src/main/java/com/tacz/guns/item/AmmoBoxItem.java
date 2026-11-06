@@ -74,8 +74,11 @@ public class AmmoBoxItem extends Item implements AmmoBoxItemDataAccessor {
 
     /**
      * 1.7.10 必须有 {@link net.minecraft.util.IIcon}（1.20 走 JSON item model + 多 predicate 覆盖）。
-     * 贴图由 assets-port 复制到 {@code assets/tacz/textures/items/ammo_box.png}；不同等级/创造模式的外观
-     * 在 L2 由 IItemRenderer 按 NBT（Level/Creative）切换（TODO(L2, client-port)），此处用基础图标。
+     *
+     * <p>
+     * 这里的平面图标只是<b>兜底</b>（自定义渲染器失败 / 渲染管线外的强制图标路径）。
+     * 正常外观由 {@code com.tacz.guns.client.renderer.item.AmmoBoxItemRenderer} 复现上游的 9 个
+     * {@code models/item/ammo_box/*.json} 3D 物品模型（按 {@link #getStatue} 选择，GTNHLib 模型管线烘焙）。
      */
     @Override
     @SideOnly(Side.CLIENT)

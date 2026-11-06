@@ -14,7 +14,7 @@ import net.minecraft.world.World;
  * <h3>1.20.1 BlockState -> 1.7.10 metadata</h3>
  * 
  * <pre>
- * FACING  meta 0-1  0=NORTH 1=SOUTH 2=WEST 3=EAST（见 AbstractGunSmithTableBlock）
+ * FACING  meta 0-1  0=SOUTH 1=WEST 2=NORTH 3=EAST（见 AbstractGunSmithTableBlock）
  * </pre>
  *
  * <p>

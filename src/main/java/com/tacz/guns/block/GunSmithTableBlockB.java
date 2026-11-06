@@ -18,7 +18,7 @@ import net.minecraftforge.common.util.ForgeDirection;
  * 
  * <pre>
  * 属性（1.20.1）   位置      取值
- * FACING           meta 0-1  0=NORTH 1=SOUTH 2=WEST 3=EAST
+ * FACING           meta 0-1  0=SOUTH 1=WEST 2=NORTH 3=EAST
  * PART（BedPart）  meta 2    0=FOOT 1=HEAD
  * </pre>
  *

@@ -53,6 +53,9 @@ public final class GunPackResourcePackReloadListener implements IResourceManager
 
     @Override
     public void onResourceManagerReload(IResourceManager resourceManager) {
+        // 先挂「模组 jar 资产」classpath 资源包（方块图集贴图 / blockstate / model JSON 的可靠来源），
+        // 再挂枪包资源包 ⇒ 枪包仍然后挂、优先级更高（与上游枪包覆盖本体资源的语义一致）。
+        com.tacz.guns.client.resource.ModAssetResourcePack.install(resourceManager);
         GunPackResourcePack.onResourceManagerReload(resourceManager);
     }
 }

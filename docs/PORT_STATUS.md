@@ -3678,3 +3678,22 @@ cam = (prev + d) + ((rotation + d) - (prev + d)) * partialTicks = lerp(prev, rot
   `lensDrew=true, reticleDrew=true`。实机回归：Elcan（开镜镜片+准星 / 腰射黑玻璃）、AUG、XL50、HK MP5A5、APM4s、HAMR 均正常。
 - **清理**：删除本轮临时诊断（INVERT A/B / GL 矩阵读取 / ADS 对齐 diag / `INVERT_FAILED` 降级），`TACZ:` 诊断日志降级为 debug。
 - 报告：`docs/review/r7/scope.md` §19；截图 `docs/review/r7/screenshots/{j_elcan_ads_ok,k_elcan_hipfire_black,l_aug_scope_ok}.png`。
+
+### r8 · 实机反馈 6 问题修复（2026-11-06，Agent Teams）
+
+- 报告索引：`docs/review/r8/README.md`（block/target/gui 三份专项）。
+- 修复内容：
+  1. 1.20 `RenderShape.MODEL` 方块（弹药库三档/武器盒/枪架）补 1.7.10 等价渲染器：
+     `JsonBlockModelRenderer`（`ISimpleBlockRenderingHandler`）+ `BlockModelQuads`（JSON 模型→四边形）+
+     `BlockStateModels`（blockstates variants/multipart）；`BlockRenderIds` 持有渲染 id（默认 0 兜底）。
+  2. `TargetMinecart`：`yOffset=0.4375`（命中盒对齐 1.20）、渲染 translate 1.875→1.4375（消除浮空）。
+  3. `BlockMetadata.facing2D/facing` 改为 1.20 `Direction#get2DDataValue()` 编码
+     （SOUTH=0/WEST=1/NORTH=2/EAST=3）⇒ 工作台/雕像/标靶/弹药库朝向与命中面校验对齐。
+  4. tooltip：`TooltipEvent` 整表折行 + 新增 `mixin/client/GuiScreenMixin` → `client/tooltip/GuiTooltipRenderer`
+     （折行 + 1.20 边界 clamp；注入 `renderToolTip`/`func_146283_a`/`drawCreativeTabHoveringText`）。
+  5. 创造栏：单内容包时隐藏 pack-filter 侧栏（多包保留上游行为）。
+- 构建：`./gradlew spotlessApply build` = BUILD SUCCESSFUL（23:01 最终产物；构建配置未改动）。
+  启动冒烟：`runClient` 完整启动到主菜单，GuiScreenMixin/CreativeModeInventoryScreenMixin 等全部成功混入，
+  TACZ `client setup finished`，无新增 crash-report（见 r8/README.md「启动冒烟验证」）。
+  实机视觉/交互回归清单见 r8/README.md，待用户确认。
+- 已知平台差异：方块模型无平滑 AO；旧存档已放置方块因 facing 编码修正会反向转一次；创造栏单包隐藏属可用性调整。

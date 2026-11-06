@@ -602,7 +602,12 @@ public class RenderType {
         private boolean lighting;
         private boolean polygonOffset;
         private float lineWidth;
-        private final FloatBuffer color = BufferUtils.createFloatBuffer(4);
+        // LWJGL2 的 `GL11.glGetFloat(int, FloatBuffer)` 对所有 pname 都做「缓冲区容量 >= 16」的保守
+        // 校验（`BufferChecks.checkBuffer(params, 16)`，见 LWJGL2 GL11.java:1358 调用处报错
+        // "Number of remaining buffer elements is 4, must be at least 16"），即使 GL_CURRENT_COLOR
+        // 只写 4 个分量。容量必须 >= 16，否则 HUD 热栏画枪（AnimateGeoItemRenderer → MultiBufferSource
+        // → setupRenderState → capture）必崩（r8 实机 23:17 crash report 的证据）。
+        private final FloatBuffer color = BufferUtils.createFloatBuffer(16);
 
         void capture() {
             this.texture2d = GL11.glIsEnabled(GL11.GL_TEXTURE_2D);

@@ -38,7 +38,7 @@ import cpw.mods.fml.relauncher.SideOnly;
  * 
  * <pre>
  * 属性（1.20.1）              位置      取值
- * FACING（HORIZONTAL_FACING） meta 0-1  0=NORTH 1=SOUTH 2=WEST 3=EAST
+ * FACING（HORIZONTAL_FACING） meta 0-1  0=SOUTH 1=WEST 2=NORTH 3=EAST
  * SHAPE（PegboardShape）      meta 2-3  0=STRAIGHT 1=CORNER_LEFT 2=CORNER_RIGHT
  * DYED                        不进 metadata，见下
  * </pre>
@@ -109,6 +109,11 @@ public class GunPegboardBlock extends Block {
      * 同时注册 grayscale 图标：上游染色走 {@code gun_pegboard_dyed} 模型
      * （{@code block/pegboard_grayscale} + {@code tintindex:0}），1.7.10 的等价物是
      * {@link #getIcon(IBlockAccess, int, int, int, int)} 换图标 + {@link #colorMultiplier}。
+     *
+     * <p>
+     * 折面模型（{@code models/block/gun_pegboard_corner*.json} / {@code glow_gun_pegboard_corner*.json}）
+     * 用的是另外 4 张贴图（{@code peg_board_cornor} 系列），也必须进方块图集，否则
+     * GTNHLib JSON 模型系统（其自动贴图注册）取到 missingno。
      */
     @Override
     @SideOnly(Side.CLIENT)
@@ -116,6 +121,9 @@ public class GunPegboardBlock extends Block {
         this.blockIcon = register.registerIcon(this.glowing ? "tacz:glow_pegboard" : "tacz:pegboard");
         this.grayscaleIcon = register
             .registerIcon(this.glowing ? "tacz:glow_pegboard_grayscale" : "tacz:pegboard_grayscale");
+        // 折面模型用的 4 张贴图（见方法注释）：只注册、不保存引用，GTNHLib 模型系统按名字取
+        register.registerIcon(this.glowing ? "tacz:glow_pegboard_cornor" : "tacz:peg_board_cornor");
+        register.registerIcon(this.glowing ? "tacz:glow_pegboard_cornor_grayscale" : "tacz:peg_board_cornor_grayscale");
     }
 
     /** 上游 {@code blockstates/gun_pegboard.json}：{@code dyed} 决定用普通还是 grayscale（可染色）贴图。 */
@@ -557,10 +565,18 @@ public class GunPegboardBlock extends Block {
     // 渲染 / 活塞
     // ------------------------------------------------------------------------------------------
 
-    /** 上游 {@code RenderShape.MODEL}。 */
+    /**
+     * 上游 {@code RenderShape.MODEL}（{@code GunPegboardBlock.java:226-229}）：模型由
+     * {@code blockstates/gun_pegboard.json} / {@code glow_gun_pegboard.json}（按 facing+dyed+shape 选
+     * 直板/折面模型）描述，1.7.10 的等价物是
+     * GTNHLib JSON 模型系统（{@code ModelISBRH}），blockstate 属性注册见 {@link TaczBlockStateProperties}。
+     *
+     * <p>
+     * 不能用 0（原版立方体）：那会把整张 64×64 贴图铺满每个面，枪架会变成一个实心方块。
+     */
     @Override
     public int getRenderType() {
-        return 0;
+        return BlockRenderIds.jsonModel();
     }
 
     /** 上游 {@code noOcclusion()}。 */

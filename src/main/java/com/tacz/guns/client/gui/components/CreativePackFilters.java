@@ -58,6 +58,12 @@ import com.tacz.guns.mcshim.RenderSystem;
  * {@link #guiLeft}/{@link #guiTop} 会回退到 {@code (width-195)/2}、{@code (height-136)/2}，正好等于原版
  * {@code GuiContainer} 的默认居中位置。
  *
+ * <h2>单包隐藏（1.7.10 数据/可用性差异）</h2>
+ * 当前页签只筛出 ≤1 个内容包时（{@code options.size() <= 2}，即只有 ALL 与一个包），筛选不会改变任何条目
+ * —— 此时整个侧栏不显示、也不接收点击/滚轮（{@link #hideWidgetControls()}）；≥2 个包时保持上游
+ * {@code CreativePackFilters} 的完整行为（ALL + 枪包按钮 + ▲▼ 翻页）。上游 1.20 单包安装下仍会显示侧栏，
+ * 本移植按可用性隐藏，详见 {@code docs/review/r8/gui.md}。
+ *
  * <h2>containerAccessProvider 注入钩子（移植特有）</h2>
  * {@code ContainerCreative} 是 {@code GuiContainerCreative} 的<b>包私有</b>内部类
  * （GuiContainerCreative.java:1003 {@code static class ContainerCreative}），本包写不出它的类型，也无法用 Mixin
@@ -171,6 +177,17 @@ public class CreativePackFilters {
     private List<ItemStack> sourceItems;
     private long packInfoVersion = -1L;
     private int packScroll;
+    /**
+     * 侧栏当前是否可见（= 当前页签存在 ≥2 个可筛内容包）。
+     *
+     * <p>
+     * 1.7.10 平台/数据差异（见 docs/review/r8/gui.md）：只有 1 个内容包时，ALL 与该包的筛选结果逐元素相同，
+     * 点击不可能改变列表 —— 上游 1.20 在单包安装下同样如此，但为了让移植版不出现「点了没反应的按钮」，
+     * 这里在单包时隐藏整个侧栏（多包时保留上游筛选行为）。隐藏后
+     * {@link #mouseScrolled} 直接返回 {@code false}，点击派发侧（{@code CreativeModeInventoryScreenMixin}）
+     * 也会因为按钮 {@code visible=false} 而全部 miss ⇒ 不会误吃点击/滚轮。
+     */
+    private boolean sidebarVisible;
 
     public CreativePackFilters(GuiContainerCreative screen, Runnable resetScroll) {
         this.screen = screen;
@@ -291,6 +308,21 @@ public class CreativePackFilters {
                 this.options.add(option);
             }
         }
+
+        // 1.7.10 平台/数据差异（见 docs/review/r8/gui.md）：当前页签实际只有 ≤1 个内容包时，
+        // ALL 与「该包」筛出的列表逐元素相同 ⇒ 侧栏点任何按钮都不会有可见变化。
+        // 上游 1.20 在单包安装下同样会显示侧栏（数据面相同），本移植按可用性隐藏它：
+        // 既不显示「无用按钮」，也不会误吃点击/滚轮。多包（options ≥ ALL + 2 包）时保留下游全部逻辑。
+        if (this.options.size() <= 2) {
+            hideWidgetControls();
+            // 该页签之前若选过包（例如运行期删掉了一个枪包），把列表恢复成完整内容
+            if (this.selections.remove(tab) != null) {
+                showItems(displayItems);
+            }
+            return;
+        }
+        this.sidebarVisible = true;
+
         String selected = this.selections.get(tab);
         if (selected != null && !groupedItems.containsKey(selected)) {
             this.selections.remove(tab);
@@ -323,6 +355,20 @@ public class CreativePackFilters {
     private void hideWidgets() {
         this.currentTab = null;
         this.sourceItems = null;
+        hideWidgetControls();
+    }
+
+    /**
+     * 只隐藏控件、<b>不清</b> {@link #currentTab}/{@link #sourceItems}（供「单包隐藏侧栏」使用）。
+     *
+     * <p>
+     * 必须保留这两个「已对账」标记：{@link #updateTab} 的早退条件是
+     * {@code currentTab == tab && sourceItems != null && packInfoVersion == 版本}，
+     * 若在这里清空它们，{@code drawScreen} HEAD 的每帧调用会重新枚举整页物品（含 Item.itemRegistry），
+     * 并把创造栏列表钉回第一页（r6 修过的「创造栏无法滚动」回归）。
+     */
+    private void hideWidgetControls() {
+        this.sidebarVisible = false;
         this.buttons.forEach(button -> button.setOption(null));
         this.previousButton.visible = this.nextButton.visible = false;
         this.previousButton.enabled = this.nextButton.enabled = false;
@@ -384,6 +430,12 @@ public class CreativePackFilters {
             this.selections.put(this.currentTab, option.namespace());
         }
         applyFilter();
+        // 实机判读用（多包安装下每次点选打一条）：确认点击真的走到筛选并替换了容器列表
+        GunMod.LOGGER.info(
+            "[TACZ] creative pack filter selected: {} ({} items)",
+            option.namespace() == null ? "all" : option.namespace(),
+            option.items()
+                .size());
     }
 
     private void applyFilter() {
@@ -442,7 +494,9 @@ public class CreativePackFilters {
     }
 
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (!RenderConfig.RENDER_CREATIVE_PACK_SIDEBAR.get() || this.currentTab == null || delta == 0) {
+        if (!this.sidebarVisible || !RenderConfig.RENDER_CREATIVE_PACK_SIDEBAR.get()
+            || this.currentTab == null
+            || delta == 0) {
             return false;
         }
         int x = guiLeft(this.screen) - 28;

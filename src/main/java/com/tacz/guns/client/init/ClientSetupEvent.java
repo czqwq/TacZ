@@ -19,21 +19,24 @@ import org.jetbrains.annotations.Nullable;
 
 import com.github.mcmodderanchor.simplebedrockmodel.v1.client.handler.FirstPersonRenderHandler;
 import com.github.mcmodderanchor.simplebedrockmodel.v1.client.renderer.IFPGeoItemRenderer;
+import com.gtnewhorizon.gtnhlib.client.model.ModelISBRH;
 import com.tacz.guns.GunMod;
 import com.tacz.guns.api.TimelessAPI;
 import com.tacz.guns.api.client.other.ThirdPersonManager;
 import com.tacz.guns.api.item.IAmmo;
 import com.tacz.guns.api.item.IAttachment;
 import com.tacz.guns.api.item.IBlock;
+import com.tacz.guns.block.BlockRenderIds;
+import com.tacz.guns.block.TaczBlockStateProperties;
 import com.tacz.guns.client.gui.overlay.DisplayCaseLockHintOverlay;
 import com.tacz.guns.client.gui.overlay.GunHudOverlay;
 import com.tacz.guns.client.gui.overlay.HeatBarOverlay;
 import com.tacz.guns.client.gui.overlay.InteractKeyTextOverlay;
 import com.tacz.guns.client.gui.overlay.KillAmountOverlay;
 import com.tacz.guns.client.input.GunInputHandler;
+import com.tacz.guns.client.renderer.item.AmmoBoxItemRenderer;
 import com.tacz.guns.client.renderer.item.AmmoItemRenderer;
 import com.tacz.guns.client.renderer.item.AttachmentItemRenderer;
-import com.tacz.guns.client.renderer.item.BlockModelGuiItemRenderer;
 import com.tacz.guns.client.renderer.item.GunItemRendererWrapper;
 import com.tacz.guns.client.renderer.item.GunSmithTableItemRenderer;
 import com.tacz.guns.client.renderer.scope.ScopeLensRenderer;
@@ -48,6 +51,7 @@ import com.tacz.guns.compat.controllable.ControllableCompat;
 import com.tacz.guns.compat.playeranimator.PlayerAnimatorCompat;
 import com.tacz.guns.compat.shouldersurfing.ShoulderSurfingCompat;
 import com.tacz.guns.init.ModItems;
+import com.tacz.guns.item.AmmoBoxItem;
 import com.tacz.guns.item.GunSmithTableItem;
 import com.tacz.guns.item.ItemClientHooks;
 import com.tacz.guns.mcshim.GuiGraphics;
@@ -228,6 +232,10 @@ public final class ClientSetupEvent {
         registerItemRendererFor(ModItems.MODERN_KINETIC_GUN);
         registerItemRendererFor(ModItems.AMMO);
         registerItemRendererFor(ModItems.ATTACHMENT);
+        // 弹药盒：上游是纯 JSON 物品模型（models/item/ammo_box.json + overrides 按 tacz:ammo_statue 选 9 个
+        // models/item/ammo_box/*.json）。1.7.10 无 JSON 物品模型体系，由 AmmoBoxItemRenderer 用 GTNHLib
+        // 模型管线复现（见该类注释）。
+        registerItemRendererFor(ModItems.AMMO_BOX);
         // 枪械工作台：上游是 GunSmithTableItem#initializeClient（**按类**生效），
         // 1.7.10 的 MinecraftForgeClient.registerItemRenderer 是**按 Item 实例**登记，
         // 所以 4 个 GunSmithTableItem 实例（default + workbench_a/b/c）都要各注册一次。
@@ -236,19 +244,15 @@ public final class ClientSetupEvent {
         registerItemRendererFor(ModItems.WORKBENCH_211);
         registerItemRendererFor(ModItems.WORKBENCH_121);
 
-        // 方块物品的 GUI 3D 图标：上游 item model parent = tacz:block/<x>（3D 方块图标）。
-        // 1.7.10 没有 JSON 方块模型体系，ItemBlock 默认退回 block atlas（64×64 UV 图集的碎块），
-        // 这里把模型 JSON 烘成四边形按 1.20 的 GUI 帧画进槽位，见 BlockModelGuiItemRenderer。
-        BlockModelGuiItemRenderer.register(ModItems.GUN_PEGBOARD, new ResourceLocation("tacz", "block/gun_pegboard"));
-        BlockModelGuiItemRenderer
-            .register(ModItems.GLOW_GUN_PEGBOARD, new ResourceLocation("tacz", "block/glow_gun_pegboard"));
-        BlockModelGuiItemRenderer.register(ModItems.AMMO_STORAGE, new ResourceLocation("tacz", "block/ammo_storage"));
-        BlockModelGuiItemRenderer
-            .register(ModItems.AMMO_STORAGE_GOLD, new ResourceLocation("tacz", "block/ammo_storage_gold"));
-        BlockModelGuiItemRenderer
-            .register(ModItems.AMMO_STORAGE_DIAMOND, new ResourceLocation("tacz", "block/ammo_storage_diamond"));
-        BlockModelGuiItemRenderer
-            .register(ModItems.GUN_DISPLAY_CASE, new ResourceLocation("tacz", "block/display_case_item"));
+        // 1.20 RenderShape.MODEL 方块（弹药库 / 枪架 / 武器盒）的 JSON 模型：
+        // 1.7.10 本身没有 BlockState/JSON 模型，本仓使用环境常驻的 GTNHLib 模型系统
+        // （com.gtnewhorizon.gtnhlib.client.model）：它在资源重载时扫描模组 jar 的
+        // assets/tacz/blockstates/** + models/**，把模型贴图注册进方块图集，并注册
+        // ModelISBRH 作为世界/物品渲染器。这里需要做两件事：
+        // ① 注册 GTNHLib blockstate 属性（facing/locked/shape/dyed/连接），模型选择依赖属性值；
+        // ② 把 ModelISBRH 的渲染 id 写进 BlockRenderIds，供 getRenderType() 返回。
+        TaczBlockStateProperties.register();
+        BlockRenderIds.setJsonModel(ModelISBRH.JSON_ISBRH_ID);
     }
 
     /**
@@ -296,6 +300,9 @@ public final class ClientSetupEvent {
         }
         if (item == ModItems.ATTACHMENT) {
             return new AttachmentItemRenderer();
+        }
+        if (item instanceof AmmoBoxItem) {
+            return new AmmoBoxItemRenderer();
         }
         // 上游 GunSmithTableItem#initializeClient 是**类级**的：default（DefaultTableItem）
         // 与 workbench_a/b/c 三个变体都属于这个类，1.7.10 必须按 instanceof 分派才等价。

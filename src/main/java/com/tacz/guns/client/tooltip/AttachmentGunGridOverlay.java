@@ -148,17 +148,15 @@ public final class AttachmentGunGridOverlay {
                 maxWidth = width;
             }
         }
-        // 与 GuiScreen#drawHoveringText 相同的框定位公式
+        // 与 GuiScreen#drawHoveringText 相同的框定位公式 + 1.20 等价边界 clamp
+        // （tooltip 绘制侧已由 mixin/client/GuiScreenMixin 做同样的 clamp，这里必须用同一入口，
+        // 否则 tooltip 被 clamp 后网格仍画在未 clamp 的位置 → 图标错位到框外）
         int lineCount = lines.size();
-        int totalHeight = lineCount > 1 ? 8 + 2 + (lineCount - 1) * 10 : 8;
-        int x = mouseX + 12;
-        int y = mouseY - 12;
-        if (x + maxWidth > screen.width) {
-            x -= 28 + maxWidth;
-        }
-        if (y + totalHeight + 6 > screen.height) {
-            y = screen.height - totalHeight - 6;
-        }
+        int totalHeight = TooltipLineUtils.boxHeight(lineCount);
+        int[] origin = TooltipLineUtils
+            .hoveringTextOrigin(mouseX, mouseY, maxWidth, totalHeight, screen.width, screen.height);
+        int x = origin[0];
+        int y = origin[1];
         int supportIndex = indexOfLine(
             lines,
             current.tooltip()

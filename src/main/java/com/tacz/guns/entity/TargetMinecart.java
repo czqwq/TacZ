@@ -50,28 +50,44 @@ import cpw.mods.fml.relauncher.Side;
  */
 public class TargetMinecart extends EntityMinecart implements ITargetEntity {
 
+    /** 上游 {@code TargetMinecart.java:41} 的 {@code .sized(0.75F, 2.4F)}（1.7.10 无 EntityType 尺寸表）。 */
+    private static final float TARGET_WIDTH = 0.75F;
+    private static final float TARGET_HEIGHT = 2.4F;
+
+    /**
+     * AABB 锚点偏移：1.7.10 {@code Entity#setPosition} 用 {@code posY - yOffset} 当盒子底面
+     * （{@code build/rfg/minecraft-src/java/net/minecraft/entity/Entity.java:352}）。
+     *
+     * <p>
+     * 上游 1.20 把 posY 当盒子底面（{@code EntityDimensions#makeBoundingBox} ⇒ 盒子 = {@code [posY, posY+2.4]}），
+     * 平直轨道上 posY = 轨道方块 y + 0.0625（{@code AbstractMinecart.java:521} 的 {@code setPos(d0,d1,d2)} 与
+     * {@code :640} 的 {@code j + 0.0625}）；1.7.10 平直轨道上 posY = 轨道方块 y + 0.5
+     * （{@code EntityMinecart#func_145821_a:669} → {@code func_70489_a:815} 返回 {@code j + 0.5}）。
+     * 故取 {@code yOffset = 0.5 - 0.0625 = 0.4375}，盒子底面才与上游一样落在 {@code 轨道 y + 0.0625}。
+     *
+     * <p>
+     * 不能沿用 {@code EntityMinecart} 构造器的 {@code height / 2}（= 1.2）：那会把盒子压到
+     * {@code [轨道 y - 0.7, 轨道 y + 1.7]}，而模型占 {@code 轨道 y ~ 轨道 y + 2.43}
+     * （见 {@code TargetMinecartRenderer#renderMinecartContents}）⇒ 靶面上半截整体在盒外，
+     * 表现就是「只有下半截打得中」。
+     */
+    private static final float Y_OFFSET = 0.4375F;
+
     @Nullable
     private GameProfile gameProfile = null;
 
     public TargetMinecart(World world) {
         super(world);
-        // 上游 TargetMinecart.java:41 `.sized(0.75F, 2.4F)`：1.7.10 的 EntityType 尺寸没有注册表，
-        // 只能在构造器里 setSize。EntityMinecart 构造器默认给 0.98×0.7
-        // （build/rfg/minecraft-src/java/net/minecraft/entity/item/EntityMinecart.java:70），
-        // 与上游标靶（细而高的靶面）差异明显，且直接影响子弹命中的 boundingBox。
-        // yOffset 依 EntityMinecart.java:71 的约定取 height/2。
-        this.setSize(0.75F, 2.4F);
-        this.yOffset = this.height / 2.0F;
+        this.setSize(TARGET_WIDTH, TARGET_HEIGHT);
+        this.yOffset = Y_OFFSET;
     }
 
     public TargetMinecart(World world, double x, double y, double z) {
         super(world, x, y, z);
-        // r2 修复：物品放置（TargetMinecartItem#onItemUse）走的是这个 3 参构造器，
-        // 上面 1 参构造器里的 setSize/setOffset **不会**执行 → 放置出来的标靶车退回原版矿车的
-        // 0.98×0.7 命中盒，2.4 高的靶面判定（上游 TargetMinecart.java:41 `.sized(0.75F, 2.4F)`）失效。
-        // 两个构造器必须同样设置（尺寸与 yOffset 约定见 1 参构造器注释）。
-        this.setSize(0.75F, 2.4F);
-        this.yOffset = this.height / 2.0F;
+        // 物品放置（TargetMinecartItem#onItemUse）走这个 3 参构造器，而 super(world,x,y,z) 内部的
+        // setPosition 用的是 1 参构造器已设好的尺寸，这里必须再设一次以保证两个入口一致。
+        this.setSize(TARGET_WIDTH, TARGET_HEIGHT);
+        this.yOffset = Y_OFFSET;
     }
 
     /**

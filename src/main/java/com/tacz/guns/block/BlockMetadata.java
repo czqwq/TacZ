@@ -14,8 +14,12 @@ import net.minecraftforge.common.util.ForgeDirection;
  * 对应方块的类注释里。本类只提供各方块共用的部分：
  * <ul>
  * <li><b>水平朝向 2 bit</b>：编码顺序与 1.20.1 {@code Direction#get2DDataValue()} 完全一致
- * （0=NORTH、1=SOUTH、2=WEST、3=EAST）。这样上游任何依赖 {@code get2DDataValue()} 的算法
- * （如 {@code AbstractGunSmithTableBlock#parseRotation}）在 1.7.10 上数值不变；</li>
+ * （0=SOUTH、1=WEST、2=NORTH、3=EAST，依据
+ * {@code tmp/minecraft-src-1.20.1/src/main/java/net/minecraft/core/Direction.java:28-31}
+ * 枚举构造器的第 3 个参数 {@code data2d}）。这样上游任何依赖 {@code get2DDataValue()} 的算法
+ * （如 {@code AbstractGunSmithTableBlock#parseRotation}）在 1.7.10 上数值不变；
+ * <b>不能</b>用 {@code ForgeDirection} 的 ordinal 顺序（DOWN,UP,NORTH,SOUTH,WEST,EAST），那会让
+ * NORTH/SOUTH 与 WEST/EAST 互换 ⇒ 所有方块渲染旋转错位；</li>
  * <li>1.20.1 {@code Direction#getClockWise()} / {@code getCounterClockWise()} 的 1.7.10 等价物
  * （不用 {@code ForgeDirection#getRotation}：它的旋转方向依赖 axis 参数，不直观）；</li>
  * <li>1.20.1 {@code BlockPlaceContext#getHorizontalDirection()} 的等价物（放置者水平朝向）；</li>
@@ -41,33 +45,46 @@ public final class BlockMetadata {
 
     private BlockMetadata() {}
 
-    /** 1.20.1 {@code Direction#get2DDataValue()} 的等价物；非水平朝向退化为 NORTH(0)。 */
+    /**
+     * 1.20.1 {@code Direction#get2DDataValue()} 的等价物；非水平朝向退化为 SOUTH(0)。
+     *
+     * <p>
+     * 编码取自 {@code tmp/minecraft-src-1.20.1/src/main/java/net/minecraft/core/Direction.java:28-31}：
+     * {@code NORTH(2,3,2)} / {@code SOUTH(3,2,0)} / {@code WEST(4,5,1)} / {@code EAST(5,4,3)}，
+     * 构造器第 3 个参数即 {@code data2d} ⇒ <b>SOUTH=0、WEST=1、NORTH=2、EAST=3</b>。
+     */
     public static int facing2D(ForgeDirection direction) {
         switch (direction) {
             case SOUTH:
-                return 1;
+                return 0;
             case WEST:
+                return 1;
+            case NORTH:
                 return 2;
             case EAST:
                 return 3;
-            case NORTH:
             default:
                 return 0;
         }
     }
 
-    /** 1.20.1 {@code Direction#from2DDataValue(int)} 的等价物；入参取 metadata 低 2 bit。 */
+    /**
+     * 1.20.1 {@code Direction#from2DDataValue(int)} 的等价物；入参取 metadata 低 2 bit。
+     *
+     * <p>
+     * 与 {@link #facing2D(ForgeDirection)} 互为逆表（见该方法的上游依据）。
+     */
     public static ForgeDirection facing(int meta) {
         switch (meta & FACING_MASK) {
-            case 1:
-                return ForgeDirection.SOUTH;
-            case 2:
-                return ForgeDirection.WEST;
-            case 3:
-                return ForgeDirection.EAST;
             case 0:
-            default:
+                return ForgeDirection.SOUTH;
+            case 1:
+                return ForgeDirection.WEST;
+            case 2:
                 return ForgeDirection.NORTH;
+            case 3:
+            default:
+                return ForgeDirection.EAST;
         }
     }
 

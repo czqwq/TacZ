@@ -40,7 +40,7 @@ import cpw.mods.fml.relauncher.SideOnly;
  * 
  * <pre>
  * 属性（1.20.1）              位置      取值
- * FACING（HORIZONTAL_FACING） meta 0-1  0=NORTH 1=SOUTH 2=WEST 3=EAST
+ * FACING（HORIZONTAL_FACING） meta 0-1  0=SOUTH 1=WEST 2=NORTH 3=EAST
  * </pre>
  * 
  * 容量不是方块状态，而是构造器参数（上游同样是构造器参数），见 {@link #getCapacityStacks()}。
@@ -314,10 +314,19 @@ public class AmmoStorageBlock extends Block {
         return 0;
     }
 
-    /** 上游 {@code RenderShape.MODEL}。 */
+    /**
+     * 上游 {@code RenderShape.MODEL}（{@code AmmoStorageBlock.java:159-162}）：模型由
+     * {@code assets/tacz/blockstates/ammo_storage*.json} + {@code models/block/ammo_storage*.json} 描述，
+     * 1.7.10 的等价物是 GTNHLib JSON 模型系统（{@code com.gtnewhorizon.gtnhlib.client.model.ModelISBRH}），
+     * blockstate 属性注册见 {@link TaczBlockStateProperties}。
+     *
+     * <p>
+     * 不能用 0（原版立方体）：那会把整张 64×64 贴图铺满每个面，而 {@code ammo_storage.json} 是
+     * 逐面 {@code uv:[0,0,4,4]} 的 16×16 裁剪。
+     */
     @Override
     public int getRenderType() {
-        return 0;
+        return BlockRenderIds.jsonModel();
     }
 
     /** 上游 {@code noOcclusion()}。 */

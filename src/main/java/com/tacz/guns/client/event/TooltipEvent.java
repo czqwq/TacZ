@@ -5,6 +5,8 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
@@ -39,6 +41,7 @@ import com.tacz.guns.client.tooltip.ClientAttachmentItemTooltip;
 import com.tacz.guns.client.tooltip.ClientBlockItemTooltip;
 import com.tacz.guns.client.tooltip.ClientGunTooltip;
 import com.tacz.guns.client.tooltip.PackInfoText;
+import com.tacz.guns.client.tooltip.TooltipLineUtils;
 import com.tacz.guns.config.client.RenderConfig;
 import com.tacz.guns.init.ModItems;
 import com.tacz.guns.inventory.tooltip.AmmoBoxTooltip;
@@ -78,8 +81,10 @@ import cpw.mods.fml.common.eventhandler.SubscribeEvent;
  * <p>
  * 已知降级：① {@code renderImage(...)} 除配件枪械网格外全部不生效 —— {@code ItemTooltipEvent} 只能往
  * {@code List<String>} 塞文本、画不了位图（受影响的是弹药盒/弹药库的 16×16 图标）；② 少数行丢掉上游
- * {@code renderText} 的绘制颜色（如弹药名 {@code 0xffaa00}），只有写在 {@code ChatStyle} 里的颜色保留；
- * ③ 1.20 的排版细节（列对齐、getWidth/getHeight 预留空间）交给 {@code GuiScreen#drawHoveringText}。
+ * {@code renderText} 的绘制颜色（如弹药名 {@code 0xffaa00}），只有写在 {@code ChatStyle} 里的颜色保留。
+ * 排版方面：本类在事件末尾对<b>整张最终行表</b>做按可用宽度的折行（{@link #wrapTooltipLines}），
+ * 绘制侧再由 {@code mixin/client/GuiScreenMixin} 补 1.20 等价的边界 clamp，两者合起来对齐上游
+ * 「tooltip 不横向出屏」的观感。
  *
  * <p>
  * 配件「按住 Shift」的枪械图标网格：{@link ClientAttachmentItemTooltip#getLegacyTooltipLines()} 在文本行里
@@ -145,6 +150,43 @@ public class TooltipEvent {
                 if (stack.getItem() instanceof BlockItemDataAccessor item && !ModItems.GUN_SMITH_TABLE.equals(item)) {
                     event.toolTip.add(formatTooltip(BlockItemDataAccessor.BLOCK_ID, item.getBlockId(stack)));
                 }
+        }
+
+        // ③ 1.7.10 平台兜底：整表按可用宽度折行（覆盖所有物品路径，含非 TACZ 物品与长 lore）。
+        wrapTooltipLines(event.toolTip);
+    }
+
+    /**
+     * 把最终 tooltip 行表就地折行到 {@link TooltipLineUtils#maxLineWidth()}（{@code min(300, scaledWidth-26)}）。
+     *
+     * <p>
+     * 1.7.10 的 tooltip 排版器 {@code GuiScreen#drawHoveringText}（{@code GuiScreen.java:156-232}）的框宽 =
+     * 最长一行，<b>不折行</b>；上游 1.20 的 tooltip 组件按 {@code getWidth(Font)} 预留、整体受排版器约束
+     * （{@code GuiGraphics#renderTooltipInternal}，{@code tmp/minecraft-src-1.20.1/.../GuiGraphics.java:575-616}）。
+     * 因此这里在 {@code ItemTooltipEvent}（{@code ItemStack.java:727}，进 tooltip 列表成型前唯一的客户端扩展点）
+     * 对<b>整张最终行表</b>逐行折行：不管行来自 TACZ 富 tooltip、原版物品名/附魔、自定义 lore 还是其它模组，
+     * 只要超宽就断行，从而与上游「tooltip 不出屏」对齐。
+     *
+     * <p>
+     * 纯空白布局行（r6 配件图标网格的撑宽行/空行）不折，见 {@link TooltipLineUtils#wrapLines}。
+     * 绘制侧还有第二道保险（{@code mixin/client/GuiScreenMixin} 的 1.20 等价边界 clamp），
+     * 两者配合保证「不超宽 + 不越出屏幕边缘」。
+     *
+     * <p>
+     * 绝不抛异常：tooltip 每帧重算，任何异常都会变成「悬停即崩」，因此内部吞掉并 debug 记录。
+     */
+    private static void wrapTooltipLines(@Nullable List<String> tooltip) {
+        if (tooltip == null || tooltip.isEmpty()) {
+            return;
+        }
+        try {
+            FontRenderer font = Minecraft.getMinecraft().fontRenderer;
+            if (font == null) {
+                return;
+            }
+            TooltipLineUtils.wrapLines(tooltip, font, TooltipLineUtils.maxLineWidth());
+        } catch (RuntimeException e) {
+            GunMod.LOGGER.debug("[TACZ] tooltip wrapping skipped", e);
         }
     }
 

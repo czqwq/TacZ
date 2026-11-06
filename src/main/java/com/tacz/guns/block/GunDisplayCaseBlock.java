@@ -37,7 +37,7 @@ import cpw.mods.fml.relauncher.SideOnly;
  * 
  * <pre>
  * 属性（1.20.1）                      位置     取值
- * FACING（HORIZONTAL_FACING）         meta 0-1 0=NORTH 1=SOUTH 2=WEST 3=EAST
+ * FACING（HORIZONTAL_FACING）         meta 0-1 0=SOUTH 1=WEST 2=NORTH 3=EAST
  * LOCKED                              meta 2   0=开 1=锁定（默认锁定，与上游 defaultState 一致）
  * LEFT / RIGHT / UP / DOWN            不进 metadata，按需从邻居现算（见下）
  * （移植新增）ISOLATED                meta 3   1=放置时潜行，不参与连接/锁定联动
@@ -218,7 +218,11 @@ public class GunDisplayCaseBlock extends Block {
         // 上游 context.isSecondaryUseActive()（潜行放置）：不补连接标记 ⇒ 该柜子永久孤立。
         // 连接标记现算后用一个 ISOLATED 位复刻，见类注释。
         boolean isolated = placer instanceof EntityPlayer player && player.isSneaking();
-        int metadata = withFacing(world.getBlockMetadata(x, y, z), facing);
+        // 上游 defaultBlockState(): GunDisplayCaseBlock.java:90-91 `.setValue(FACING, NORTH).setValue(LOCKED, true)`
+        // ⇒ 放置出来的展示柜默认是**锁定**（玻璃/厚板形态）。1.7.10 没有 BlockState，metadata 里 LOCKED 位
+        // 必须显式写 true，否则 locked=false 时 blockstates 的 glass_* 部件全部不生效（看起来「没有玻璃」），
+        // 碰撞/形状也会退化成打开形态（GunDisplayCaseBlock.java:192-197 的 *_LOCKED_SHAPE）。
+        int metadata = withLocked(withFacing(world.getBlockMetadata(x, y, z), facing), true);
         if (isolated) {
             metadata = BlockMetadata.withFlag(metadata, ISOLATED_BIT, true);
         }
@@ -478,10 +482,18 @@ public class GunDisplayCaseBlock extends Block {
         super.breakBlock(world, x, y, z, block, metadata);
     }
 
-    /** 上游 {@code RenderShape.MODEL}。 */
+    /**
+     * 上游 {@code RenderShape.MODEL}（{@code GunDisplayCaseBlock.java:236-239}）：模型由
+     * {@code blockstates/gun_display_case.json}（multipart，按 FACING/LOCKED/LEFT/RIGHT/UP/DOWN 选
+     * core / back_panel / corner_* / edge_* / glass_*）描述，1.7.10 的等价物是
+     * GTNHLib JSON 模型系统（{@code ModelISBRH}），blockstate 属性注册见 {@link TaczBlockStateProperties}。
+     *
+     * <p>
+     * 不能用 0（原版立方体）：那会把整张 128×128 的 {@code display_case_all} 铺满每个面。
+     */
     @Override
     public int getRenderType() {
-        return 0;
+        return BlockRenderIds.jsonModel();
     }
 
     /** 上游 {@code noOcclusion()}。 */

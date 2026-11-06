@@ -463,7 +463,9 @@ public final class ScopeLensRenderer {
         }
         // 上游 capture() 要求「当前 draw framebuffer 是主目标且 viewport 铺满」（ScopeLensRenderer.java:80-89），
         // 否则捕获的掩膜像素网格与最终画面不一致；1.7.10 同语义：不满足就回退原版绘制。
-        IntBuffer viewport = BufferUtils.createIntBuffer(4);
+        // LWJGL2 的 glGetInteger(int, IntBuffer) 同样按「最多 16 个返回值」做保守容量校验
+        // （BufferChecks.checkBuffer(params, 16)），GL_VIEWPORT 只写 4 个也要求容量 >= 16。
+        IntBuffer viewport = BufferUtils.createIntBuffer(16);
         GL11.glGetInteger(GL11.GL_VIEWPORT, viewport);
         if (viewport.get(0) != 0 || viewport.get(1) != 0
             || viewport.get(2) != main.framebufferTextureWidth
@@ -2114,8 +2116,11 @@ public final class ScopeLensRenderer {
 
         private final IntBuffer viewport = BufferUtils.createIntBuffer(16);
         private final IntBuffer scissorBox = BufferUtils.createIntBuffer(16);
-        private final ByteBuffer colorMask = BufferUtils.createByteBuffer(4);
-        private final FloatBuffer clearColor = BufferUtils.createFloatBuffer(4);
+        // LWJGL2 的 glGetBoolean/glGetFloat 对传入缓冲区做「容量 >= 16」的保守校验
+        // （BufferChecks.checkBuffer(params, 16)），哪怕 GL_COLOR_WRITEMASK / GL_COLOR_CLEAR_VALUE
+        // 只会写 4 个分量；容量必须 >= 16，否则镜头渲染入口一捕获状态就抛 IllegalArgumentException。
+        private final ByteBuffer colorMask = BufferUtils.createByteBuffer(16);
+        private final FloatBuffer clearColor = BufferUtils.createFloatBuffer(16);
         private final int program;
         private final int texture0;
         private final int texture1;

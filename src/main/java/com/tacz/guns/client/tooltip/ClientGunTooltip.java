@@ -183,6 +183,9 @@ public class ClientGunTooltip {
             if (tooltip != null) {
                 // 上游 font.split(Component.translatable(tooltip), 300)：
                 // 1.7.10 的等价物是 FontRenderer#listFormattedStringToWidth(String, int)（按宽度折行）。
+                // 平台差异：上游的 300 是固定值（1.20 的排版器随后还会把整框收进屏幕），1.7.10 没有排版器，
+                // 所以这里改用 TooltipLineUtils#maxLineWidth()（= min(300, scaledWidth-26)），
+                // 保证小窗口/大 GUI 缩放下也不会比屏幕宽。
                 // **1.7.10 修正（显示错误，P1）**：`.lang` 是 1.7.10 的纯文本格式，
                 // Locale#loadLocaleData 逐行读 `key=value` 后**不做任何转义处理**
                 // （build/rfg/minecraft-src/java/net/minecraft/client/resources/Locale.java:106-126，
@@ -192,10 +195,11 @@ public class ClientGunTooltip {
                 // 默认枪包里 tacz.gun.<id>.desc / tacz.attachment.<id>.desc 大量使用 `\n`
                 // （如 custom/tacz_default_gun/.../lang/en_US.lang:141,261-266），
                 // 不先按字面量切分就会把 `\n` 当正文画出来，而且按宽度折行而不是按作者意图断句。
+                int maxLineWidth = TooltipLineUtils.maxLineWidth();
                 List<String> split = new ArrayList<>();
                 for (String segment : StatCollector.translateToLocal(tooltip)
                     .split("\\\\n", -1)) {
-                    split.addAll(font.listFormattedStringToWidth(segment, 300));
+                    split.addAll(font.listFormattedStringToWidth(segment, maxLineWidth));
                 }
                 if (split.size() > 3) {
                     this.desc = split.subList(0, 3);

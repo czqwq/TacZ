@@ -81,6 +81,8 @@ public class InternalAssetLoader {
     public static void onResourceReload() {
         // 内部资源可被资源包覆盖，物品模型 display 缓存随原版资源重载一起作废
         ItemModelDisplayManager.onResourceReload();
+        // 弹药盒 3D 物品模型（GTNHLib JSON 模型烘焙结果）同样可能被资源包覆盖
+        com.tacz.guns.client.renderer.item.AmmoBoxItemRenderer.onResourceReload();
 
         // 加载默认动画文件
         BedrockAnimationFile pistolAnimationFile = loadAnimations(DEFAULT_PISTOL_ANIMATIONS_LOC);

@@ -23,6 +23,7 @@ import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
 
+import com.gtnewhorizon.gtnhlib.api.BlockModelInfo;
 import com.mojang.authlib.GameProfile;
 import com.tacz.guns.advancement.TargetHitTrigger;
 import com.tacz.guns.block.entity.TargetBlockEntity;
@@ -41,7 +42,7 @@ import cpw.mods.fml.relauncher.SideOnly;
  * 
  * <pre>
  * 属性（1.20.1）              位置      取值
- * FACING（HORIZONTAL_FACING） meta 0-1  0=NORTH 1=SOUTH 2=WEST 3=EAST
+ * FACING（HORIZONTAL_FACING） meta 0-1  0=SOUTH 1=WEST 2=NORTH 3=EAST
  * HALF（DoubleBlockHalf）     meta 2    0=LOWER 1=UPPER
  * STAND                       meta 3    0=倒下 1=立着
  * OUTPUT_POWER（0-15）        不是在 metadata 里，见下
@@ -73,7 +74,7 @@ import cpw.mods.fml.relauncher.SideOnly;
  * <li>{@code PushReaction.DESTROY} -> {@link #getMobilityFlag()}。</li>
  * </ul>
  */
-public class TargetBlock extends Block {
+public class TargetBlock extends Block implements BlockModelInfo {
 
     /** 上游 {@code HALF} / {@code STAND} 占用的 metadata 位。 */
     private static final int HALF_UPPER_BIT = 2;
@@ -543,4 +544,23 @@ public class TargetBlock extends Block {
         return Math.max(configured / 16.0F, 0.0F);
     }
 
+    /**
+     * GTNHLib JSON 模型系统的 <b>opt-out</b>（1.7.10 平台适配）。
+     *
+     * <p>
+     * 上游 1.20 里本方块是 {@code RenderShape.ENTITYBLOCK_ANIMATED}（{@code -1} + BER），
+     * 1.7.10 同样用 {@code TileEntitySpecialRenderer} 渲染。但 GTNHLib 的模型扫描器会按
+     * {@code assets/tacz/blockstates/<name>.json} 是否存在把方块标记为「有 JSON 模型」，
+     * 进而覆盖其物品渲染器/方块图标（本方块在 1.7.10 的 blockstate JSON 只是上游遗留资产，
+     * 模型 JSON 也没有 elements）。这里显式声明为「非模型方块」，让 GTNHLib 保留我们的 BER/原版渲染。
+     */
+    @Override
+    public boolean nhlib$isModeled() {
+        return false;
+    }
+
+    @Override
+    public void nhlib$setModeled(boolean modeled) {
+        // 显式 opt-out：保持 false
+    }
 }

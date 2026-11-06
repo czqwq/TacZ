@@ -27,6 +27,7 @@ import org.jetbrains.annotations.Nullable;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 import com.tacz.guns.GunMod;
 import com.tacz.guns.api.resource.ResourceManager;
 import com.tacz.guns.config.PreLoadConfig;
@@ -99,12 +100,30 @@ public enum GunPackLoader {
     private List<IGunPackSource> packSources = Collections.emptyList();
 
     /**
+     * 上一次扫描得到的「包路径 → 文件源」句柄，用于跨重扫复用同一份 {@link IGunPackSource}。
+     *
+     * <p>
+     * <b>为什么必须复用（1.7.10 单人游戏平台差异）</b>：单人游戏里客户端与服务端共用同一个
+     * {@link GunPackLoader} 静态实例，但两侧会各自触发一次 {@link #reloadPackList()}（客户端
+     * {@code ClientAssetsManager#reloadAllPack} 第一步 + 集成服 {@code CommonAssetsManager#reloadAllPack}）。
+     * 旧实现每次重扫都会 {@code close()} 上一轮的 {@link ZipGunPackSource}，而客户端数据管理器
+     * （{@code LazyJsonDataManager} 的懒加载器）手里还握着上一轮扫描得到的「source + 包内路径」，
+     * 等到集成服那条重扫把 zip 关掉后，懒加载再 {@code open()} 就返回 {@code null}：
+     * 表现为 {@code Failed to read raw data file assets/<ns>/geo_models/...}、
+     * {@code there is no corresponding model file}，自定义枪包（zip 形态）的所有枪无模型（第一人称不渲染、
+     * 第三人称退化成物品图标）。
+     *
+     * <p>
+     * 复用判定：目录源（实时读文件，无句柄）恒复用；zip 源仅当文件 mtime/大小未变时复用，
+     * 这样玩家替换同名 zip 后再次 {@code /tacz reload} 仍能读到新内容。
+     */
+    private Map<Path, SourceHandle> sourceHandles = new HashMap<>();
+
+    /**
      * 重扫枪包目录。对应上游 {@code GunPackLoader#discoverExtensions}（含默认枪包导出与
      * {@code PreLoadConfig} 加载），可重复调用；每次调用会释放上一次打开的 zip 句柄。
      */
     public synchronized void reloadPackList() {
-        closeSources();
-
         Path resourcePacksPath = getPackDirectory();
         File folder = resourcePacksPath.toFile();
         if (!folder.isDirectory()) {
@@ -112,6 +131,7 @@ public enum GunPackLoader {
                 Files.createDirectories(folder.toPath());
             } catch (Exception exception) {
                 GunMod.LOGGER.warn(MARKER, "Failed to init tacz resource directory...", exception);
+                closeAllSources();
                 packs = Collections.emptyList();
                 packSources = Collections.emptyList();
                 return;
@@ -144,13 +164,50 @@ public enum GunPackLoader {
         GunMod.LOGGER.info(MARKER, "Found {} possible gunpack(s) and added them to resource set.", scanned.size());
 
         List<IGunPackSource> sources = new ArrayList<>(scanned.size());
+        Map<Path, SourceHandle> handles = new HashMap<>(scanned.size());
         for (GunPack gunPack : scanned) {
-            if (Files.isDirectory(gunPack.path())) {
-                sources.add(new DirectoryGunPackSource(gunPack.path(), gunPack.name()));
+            Path path = gunPack.path()
+                .toAbsolutePath()
+                .normalize();
+            boolean directory = Files.isDirectory(gunPack.path());
+            long lastModified = 0L;
+            long size = 0L;
+            if (!directory) {
+                try {
+                    lastModified = Files.getLastModifiedTime(gunPack.path())
+                        .toMillis();
+                    size = Files.size(gunPack.path());
+                } catch (IOException exception) {
+                    // 读不到时间戳就当作「变了」，宁可新开句柄也不要复用陈旧内容
+                    lastModified = 0L;
+                    size = -1L;
+                }
+            }
+            SourceHandle previous = sourceHandles.get(path);
+            SourceHandle handle;
+            if (previous != null && previous.canReuse(directory, lastModified, size)) {
+                handle = previous;
+            } else if (directory) {
+                handle = new SourceHandle(new DirectoryGunPackSource(gunPack.path(), gunPack.name()), true, 0L, 0L);
             } else {
-                sources.add(new ZipGunPackSource(gunPack.path(), gunPack.name()));
+                handle = new SourceHandle(
+                    new ZipGunPackSource(gunPack.path(), gunPack.name()),
+                    false,
+                    lastModified,
+                    size);
+            }
+            handles.put(path, handle);
+            sources.add(handle.source());
+        }
+        // 只释放「被删除或被替换」的旧 zip 句柄；可复用的旧源已经带到 handles 里继续服务懒加载
+        for (Map.Entry<Path, SourceHandle> entry : sourceHandles.entrySet()) {
+            if (handles.get(entry.getKey()) != entry.getValue()) {
+                closeSource(
+                    entry.getValue()
+                        .source());
             }
         }
+        this.sourceHandles = handles;
         this.packs = List.copyOf(scanned);
         this.packSources = List.copyOf(sources);
 
@@ -269,23 +326,23 @@ public enum GunPackLoader {
             return 0;
         }
         Map<String, HashMap<String, String>> byLocale = new LinkedHashMap<>();
-        for (IGunPackSource source : INSTANCE.getPackSources()) {
-            for (String path : source.listFiles(GunPackResources.ASSETS_ROOT)) {
-                String locale = localeOfLangFile(path);
-                if (locale == null) {
-                    continue;
-                }
-                try (InputStream stream = source.open(path)) {
-                    if (stream == null) {
+        List<IGunPackSource> sources = INSTANCE.getPackSources();
+        // 两遍：先 1.7.10 的 .lang，再 1.20 的 .json（同键时 JSON 作为上游权威格式覆盖）
+        for (String extension : new String[] { ".lang", ".json" }) {
+            for (IGunPackSource source : sources) {
+                for (String path : source.listFiles(GunPackResources.ASSETS_ROOT)) {
+                    if (!path.endsWith(extension)) {
                         continue;
                     }
-                    HashMap<String, String> parsed = StringTranslate.parseLangFile(stream);
+                    String locale = localeOfLangFile(path);
+                    if (locale == null) {
+                        continue;
+                    }
+                    Map<String, String> parsed = parseLangResource(source, path);
                     if (parsed != null && !parsed.isEmpty()) {
                         byLocale.computeIfAbsent(locale, key -> new HashMap<>())
                             .putAll(parsed);
                     }
-                } catch (IOException exception) {
-                    GunMod.LOGGER.warn(MARKER, "Failed to read gun pack language file {}", path, exception);
                 }
             }
         }
@@ -307,23 +364,98 @@ public enum GunPackLoader {
     /**
      * 从包内路径解析语种码（{@code assets/<ns>/lang/zh_CN.lang} → {@code zh_CN}）。
      *
+     * <p>
+     * 同时接受 1.20 枪包使用的 JSON 语言文件（{@code assets/<ns>/lang/zh_cn.json}），并归一化成
+     * 1.7.10 语言表的语种码形状（小写语言 + 大写地区，如 {@code zh_cn → zh_CN}）。
+     *
      * @return 不是语言文件 / 语种码形状不合法时返回 {@code null}
      */
     private static @Nullable String localeOfLangFile(String path) {
         String prefix = GunPackResources.ASSETS_ROOT + "/";
-        if (path == null || !path.startsWith(prefix) || !path.contains("/lang/") || !path.endsWith(".lang")) {
+        if (path == null || !path.startsWith(prefix) || !path.contains("/lang/")) {
             return null;
         }
         String fileName = path.substring(path.lastIndexOf('/') + 1);
-        String locale = fileName.substring(0, fileName.length() - ".lang".length());
-        // 1.7.10 的语种码形如 en_US / zh_CN / tr_TR；只接受字母/下划线，避免把任意 .lang 当语种注入
+        String code;
+        if (fileName.endsWith(".lang")) {
+            code = fileName.substring(0, fileName.length() - ".lang".length());
+        } else if (fileName.endsWith(".json")) {
+            code = fileName.substring(0, fileName.length() - ".json".length());
+        } else {
+            return null;
+        }
+        return normalizeLocaleCode(code);
+    }
+
+    /**
+     * 1.20 语言文件用 {@code en_us} / {@code zh_cn}，1.7.10 语言表用 {@code en_US} / {@code zh_CN}；
+     * 本方法把前者归一成后者（首段小写、其余段大写）。
+     *
+     * @return 形状不合法（非字母数字/下划线）时返回 {@code null}
+     */
+    private static @Nullable String normalizeLocaleCode(String code) {
+        if (code == null || code.isEmpty()) {
+            return null;
+        }
+        String[] parts = code.split("_");
+        StringBuilder builder = new StringBuilder(code.length());
+        for (int i = 0; i < parts.length; i++) {
+            if (parts[i].isEmpty()) {
+                return null;
+            }
+            if (i > 0) {
+                builder.append('_');
+            }
+            builder.append(
+                i == 0 ? parts[i].toLowerCase(java.util.Locale.ROOT) : parts[i].toUpperCase(java.util.Locale.ROOT));
+        }
+        String locale = builder.toString();
+        // 只接受字母/数字/下划线，避免把任意文件当语种注入
         for (int i = 0; i < locale.length(); i++) {
             char c = locale.charAt(i);
             if (!Character.isLetterOrDigit(c) && c != '_') {
                 return null;
             }
         }
-        return locale.isEmpty() ? null : locale;
+        return locale;
+    }
+
+    /**
+     * 读取一个枪包语言文件到键值表。
+     *
+     * <p>
+     * 1.7.10 原版 {@code .lang} 走 {@link StringTranslate#parseLangFile}（语义见
+     * {@link #injectGunPackLanguage} 注释）；1.20 枪包用 JSON（{@code {"key": "value"}}），
+     * 这里用 Gson 解析。移植早期只认 {@code .lang}，导致新增的 1.20 自定义枪包名称/描述全显示原始键名
+     * （{@code sk25tkm.gun.s25o.name} 这类）。
+     *
+     * @return 读不到/格式不支持时返回 {@code null}
+     */
+    private static @Nullable Map<String, String> parseLangResource(IGunPackSource source, String path) {
+        try (InputStream stream = source.open(path)) {
+            if (stream == null) {
+                return null;
+            }
+            if (path.endsWith(".lang")) {
+                return StringTranslate.parseLangFile(stream);
+            }
+            JsonElement element = new JsonParser().parse(new InputStreamReader(stream, StandardCharsets.UTF_8));
+            if (!element.isJsonObject()) {
+                return null;
+            }
+            Map<String, String> parsed = new HashMap<>();
+            for (Map.Entry<String, JsonElement> entry : element.getAsJsonObject()
+                .entrySet()) {
+                JsonElement value = entry.getValue();
+                if (value != null && value.isJsonPrimitive()) {
+                    parsed.put(entry.getKey(), value.getAsString());
+                }
+            }
+            return parsed;
+        } catch (IOException | JsonParseException | IllegalStateException exception) {
+            GunMod.LOGGER.warn(MARKER, "Failed to read gun pack language file {}", path, exception);
+            return null;
+        }
     }
 
     /**
@@ -365,22 +497,25 @@ public enum GunPackLoader {
             return;
         }
         HashMap<String, String> merged = new HashMap<>();
-        String suffix = "/lang/" + locale + ".lang";
-        for (IGunPackSource source : INSTANCE.getPackSources()) {
-            for (String path : source.listFiles(GunPackResources.ASSETS_ROOT)) {
-                if (!path.startsWith(GunPackResources.ASSETS_ROOT + "/") || !path.endsWith(suffix)) {
-                    continue;
-                }
-                try (InputStream stream = source.open(path)) {
-                    if (stream == null) {
+        String target = normalizeLocaleCode(locale);
+        if (target == null) {
+            return;
+        }
+        // 两遍：先 .lang 再 .json（与 injectAllGunPackLanguages 同一优先级）
+        for (String extension : new String[] { ".lang", ".json" }) {
+            for (IGunPackSource source : INSTANCE.getPackSources()) {
+                for (String path : source.listFiles(GunPackResources.ASSETS_ROOT)) {
+                    if (!path.endsWith(extension)) {
                         continue;
                     }
-                    HashMap<String, String> parsed = StringTranslate.parseLangFile(stream);
+                    String pathLocale = localeOfLangFile(path);
+                    if (pathLocale == null || !pathLocale.equalsIgnoreCase(target)) {
+                        continue;
+                    }
+                    Map<String, String> parsed = parseLangResource(source, path);
                     if (parsed != null) {
                         merged.putAll(parsed);
                     }
-                } catch (IOException exception) {
-                    GunMod.LOGGER.warn(MARKER, "Failed to read gun pack language file {}", path, exception);
                 }
             }
         }
@@ -391,12 +526,40 @@ public enum GunPackLoader {
         }
     }
 
+    /** 释放一个 zip 枪包的文件句柄（目录源无句柄可释放）。 */
+    private static void closeSource(IGunPackSource source) {
+        if (source instanceof ZipGunPackSource zip) {
+            zip.close();
+        }
+    }
+
     /** 释放所有 zip 枪包的文件句柄。 */
-    private void closeSources() {
+    private void closeAllSources() {
+        for (SourceHandle handle : sourceHandles.values()) {
+            closeSource(handle.source());
+        }
+        sourceHandles = new HashMap<>();
         for (IGunPackSource source : packSources) {
-            if (source instanceof ZipGunPackSource zip) {
-                zip.close();
+            closeSource(source);
+        }
+    }
+
+    /**
+     * 一次扫描得到的枪包文件源 + 复用判定戳。
+     *
+     * @see #sourceHandles 为什么需要复用
+     */
+    private record SourceHandle(IGunPackSource source, boolean directory, long lastModified, long size) {
+
+        /** 目录源恒可复用（无句柄、实时读文件）；zip 源要求 mtime 与大小都没变。 */
+        private boolean canReuse(boolean directory, long lastModified, long size) {
+            if (this.directory != directory) {
+                return false;
             }
+            if (directory) {
+                return true;
+            }
+            return this.lastModified == lastModified && this.size == size;
         }
     }
 

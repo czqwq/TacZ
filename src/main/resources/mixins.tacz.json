@@ -24,6 +24,7 @@
     "client.CreativeModeInventoryScreenMixin",
     "client.AbstractButtonMixin",
     "client.CreativeContainerAccessor",
+    "client.GuiScreenMixin",
     "client.EntityRenderDispatcherMixin",
     "client.PlayerCrawlPoseMixin",
     "client.EntityRendererCrawlCameraMixin"
