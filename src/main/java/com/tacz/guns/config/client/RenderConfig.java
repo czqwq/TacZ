@@ -1,0 +1,156 @@
+package com.tacz.guns.config.client;
+
+import com.tacz.guns.client.renderer.crosshair.CrosshairType;
+import com.tacz.guns.config.BooleanConfigValue;
+import com.tacz.guns.config.ConfigBuilder;
+import com.tacz.guns.config.DoubleConfigValue;
+import com.tacz.guns.config.EnumConfigValue;
+import com.tacz.guns.config.IntConfigValue;
+
+/**
+ * 上游 {@code tmp/TACZ-1.20.1/src/main/java/com/tacz/guns/config/client/RenderConfig.java} 的 1.7.10 版本。
+ *
+ * <p>
+ * 配置项名称 / 默认值 / 范围 / 注释与上游一致；仅把 {@code ForgeConfigSpec.*} 换成
+ * {@link ConfigBuilder} 系列（底层 1.7.10 {@code Configuration}）。
+ * {@code CROSSHAIR_TYPE} 的枚举类型仍然是客户端的 {@link CrosshairType}（上游同款）。
+ */
+public class RenderConfig {
+
+    public static BooleanConfigValue ENABLE_LASER_FADE_OUT;
+    public static BooleanConfigValue RENDER_MUZZLE_SMOKE;
+    public static BooleanConfigValue DISABLE_THIRD_PERSON_OFFHAND_AND_HOTBAR_GUN_RENDER;
+    public static IntConfigValue GUN_LOD_RENDER_DISTANCE;
+    public static IntConfigValue BULLET_HOLE_PARTICLE_LIFE;
+    public static DoubleConfigValue BULLET_HOLE_PARTICLE_FADE_THRESHOLD;
+    public static BooleanConfigValue HIT_PARTICLE_ENABLE;
+    public static BooleanConfigValue HIT_EXTRA_PARTICLE_ENABLE;
+    public static IntConfigValue HIT_PARTICLE_MAX_DISTANCE;
+    public static EnumConfigValue<CrosshairType> CROSSHAIR_TYPE;
+    public static DoubleConfigValue HIT_MARKET_START_POSITION;
+    public static BooleanConfigValue HEAD_SHOT_DEBUG_HITBOX;
+    public static BooleanConfigValue GUN_HUD_ENABLE;
+    public static BooleanConfigValue KILL_AMOUNT_ENABLE;
+    public static DoubleConfigValue KILL_AMOUNT_DURATION_SECOND;
+    public static IntConfigValue TARGET_RENDER_DISTANCE;
+    public static BooleanConfigValue FIRST_PERSON_BULLET_TRACER_ENABLE;
+    public static BooleanConfigValue DISABLE_INTERACT_HUD_TEXT;
+    public static BooleanConfigValue AUTO_SELECT_GUN_SMITH_TABLE_FILTER;
+    public static BooleanConfigValue RENDER_CREATIVE_PACK_SIDEBAR;
+    public static IntConfigValue DAMAGE_COUNTER_RESET_TIME;
+    public static BooleanConfigValue DISABLE_MOVEMENT_ATTRIBUTE_FOV;
+    public static DoubleConfigValue GUN_HURT_BOB_MULTIPLIER;
+    public static BooleanConfigValue ENABLE_TACZ_ID_IN_TOOLTIP;
+    public static BooleanConfigValue BLOCK_ENTITY_TRANSLUCENT;
+    public static BooleanConfigValue DISPLAY_GUN_VBO;
+    public static BooleanConfigValue STATIC_ITEM_GUN_VBO;
+    public static BooleanConfigValue EXPERIMENTAL_SCOPE_LENS;
+    public static BooleanConfigValue SCOPE_THERMAL_ENABLE;
+
+    public static void init(ConfigBuilder builder) {
+        builder.push("render");
+
+        builder.comment(
+            "Whether or not apply fadeout effect on the laser beam. Close this may improve laser performance under some shaders.");
+        ENABLE_LASER_FADE_OUT = builder.define("EnableLaserFadeOut", true);
+
+        builder.comment(
+            "Whether or not to render the renew (snowstorm particle) muzzle smoke. Disable this if translucent smoke has issues with shaders.");
+        RENDER_MUZZLE_SMOKE = builder.define("RenderMuzzleSmoke", true);
+
+        builder.comment(
+            "Disable third-person rendering of guns stored in the offhand and unselected hotbar slots. Main-hand gun rendering is unaffected.");
+        DISABLE_THIRD_PERSON_OFFHAND_AND_HOTBAR_GUN_RENDER = builder
+            .define("DisableThirdPersonOffhandAndHotbarGunRender", false);
+
+        builder.comment("How far to display the lod model, 0 means always display");
+        GUN_LOD_RENDER_DISTANCE = builder.defineInRange("GunLodRenderDistance", 0, 0, Integer.MAX_VALUE);
+
+        builder.comment("The existence time of bullet hole particles, in tick");
+        BULLET_HOLE_PARTICLE_LIFE = builder.defineInRange("BulletHoleParticleLife", 400, 0, Integer.MAX_VALUE);
+
+        builder.comment("The threshold for fading out when rendering bullet hole particles");
+        BULLET_HOLE_PARTICLE_FADE_THRESHOLD = builder.defineInRange("BulletHoleParticleFadeThreshold", 0.98, 0, 1);
+
+        builder.comment("Whether or not to spawn extra hit particles when bullets leave bullet holes");
+        HIT_PARTICLE_ENABLE = builder.define("HitParticleEnable", true);
+
+        builder.comment(
+            "Whether or not to spawn display-configured extra hit particles. Disabling this keeps the basic block hit particles.");
+        HIT_EXTRA_PARTICLE_ENABLE = builder.define("HitExtraParticleEnable", true);
+
+        builder.comment("The farthest distance to spawn extra hit particles, 0 means always spawn");
+        HIT_PARTICLE_MAX_DISTANCE = builder.defineInRange("HitParticleMaxDistance", 64, 0, Integer.MAX_VALUE);
+
+        builder.comment("The crosshair when holding a gun");
+        CROSSHAIR_TYPE = builder.defineEnum("CrosshairType", CrosshairType.DOT_1);
+
+        builder.comment("The starting position of the hit marker");
+        HIT_MARKET_START_POSITION = builder.defineInRange("HitMarketStartPosition", 4d, -1024d, 1024d);
+
+        builder.comment("Whether or not to display the head shot's hitbox");
+        HEAD_SHOT_DEBUG_HITBOX = builder.define("HeadShotDebugHitbox", false);
+
+        builder.comment("Whether or not to display the gun's HUD");
+        GUN_HUD_ENABLE = builder.define("GunHUDEnable", true);
+
+        builder.comment("Whether or not to display the kill amount");
+        KILL_AMOUNT_ENABLE = builder.define("KillAmountEnable", true);
+
+        builder.comment("The duration of the kill amount, in second");
+        KILL_AMOUNT_DURATION_SECOND = builder.defineInRange("KillAmountDurationSecond", 3, 0, Double.MAX_VALUE);
+
+        builder.comment("The farthest render distance of the target, including minecarts type");
+        TARGET_RENDER_DISTANCE = builder.defineInRange("TargetRenderDistance", 128, 0, Integer.MAX_VALUE);
+
+        builder.comment("Whether or not to render first person bullet trail");
+        FIRST_PERSON_BULLET_TRACER_ENABLE = builder.define("FirstPersonBulletTracerEnable", true);
+
+        builder.comment("Disable the interact hud text in center of the screen");
+        DISABLE_INTERACT_HUD_TEXT = builder.define("DisableInteractHudText", false);
+
+        builder.comment(
+            "Whether or not to automatically select the gun smith table's held item filter when opening it with a gun, attachment or ammo in main hand");
+        AUTO_SELECT_GUN_SMITH_TABLE_FILTER = builder.define("AutoSelectGunSmithTableFilter", true);
+
+        builder.comment(
+            "Whether or not to display the content pack sidebar in TACZ creative tabs. Disabling this also restores all items in the current tab.");
+        RENDER_CREATIVE_PACK_SIDEBAR = builder.define("RenderCreativePackSidebar", true);
+
+        builder.comment("Max time the damage counter will reset");
+        DAMAGE_COUNTER_RESET_TIME = builder.defineInRange("DamageCounterResetTime", 2000, 10, Integer.MAX_VALUE);
+
+        builder.comment("Disable the fov effect from the movement speed attribute while holding a gun");
+        DISABLE_MOVEMENT_ATTRIBUTE_FOV = builder.define("DisableMovementAttributeFov", true);
+
+        builder.comment(
+            "First-person vanilla hurt tilt multiplier while holding a gun in the main hand. 0 disables it, 1 preserves vanilla side-hit strength. Front/back hits use half this multiplier, with smooth transitions for diagonal hits. Multiplies the vanilla Damage Tilt setting; gunshot-specific hurt effects keep their gun data settings.");
+        GUN_HURT_BOB_MULTIPLIER = builder.defineInRange("GunHurtBobMultiplier", 0.1, 0, 1);
+
+        builder.comment("Enable the display of the TACZ ID in the tooltip when Advanced Tooltip is enabled");
+        ENABLE_TACZ_ID_IN_TOOLTIP = builder.define("EnableTaczIdInTooltip", true);
+
+        builder.comment(
+            "Enable translucent while render block entity or not. Enable this option will result in ADDITIONAL PERFORMANCE OVERHEAD.");
+        BLOCK_ENTITY_TRANSLUCENT = builder.define("EnableBlockEntityTranslucent", false);
+
+        builder.comment("Experimental SBM VBO rendering for guns in display cases and pegboards.");
+        DISPLAY_GUN_VBO = builder.define("EnableExperimentalDisplayGunVbo", true);
+
+        builder.comment(
+            "Experimental SBM VBO rendering for third-person held, dropped and fixed guns outside GUI screens.");
+        STATIC_ITEM_GUN_VBO = builder.define("EnableStaticItemGunVbo", true);
+
+        builder.comment(
+            "Enable scope lens effects configured by each attachment display. Uses the existing scope window and keeps the normal aiming magnification.");
+        EXPERIMENTAL_SCOPE_LENS = builder.define("EnableExperimentalScopeLens", true);
+
+        builder.comment(
+            "Allow thermal imaging for attachments whose display selects a thermal vision mode. Disabling this uses their normal optical lens and skips thermal entity capture. Requires EnableExperimentalScopeLens.");
+        SCOPE_THERMAL_ENABLE = builder.define("EnableScopeThermal", true);
+
+        builder.pop();
+    }
+
+    private RenderConfig() {}
+}

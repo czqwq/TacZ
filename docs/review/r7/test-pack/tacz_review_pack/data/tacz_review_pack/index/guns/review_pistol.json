@@ -1,0 +1,8 @@
+{
+  "name": "tacz_review_pack.gun.review_pistol.name",
+  "tooltip": "tacz_review_pack.gun.review_pistol.desc",
+  "display": "tacz_review_pack:review_pistol_display",
+  "data": "tacz_review_pack:review_pistol_data",
+  "type": "pistol",
+  "sort": 0
+}

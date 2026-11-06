@@ -7,19 +7,39 @@ dependencies {
         // 是否自动为输出的jar添加 `gtnhVersion` 后缀
         attachManifestVersionToJar = false
     }
-//Write deps here
-    //Placeholder
+    implementation(gtnhDev("GTNHLib"))
+    //implementation(gtnhDev("GT5-Unofficial"))
 
+    // ---------------------------------------------------------------------------------------------
+    // 上游 1.20.1 依赖在 1.7.10 的替代（来源：tmp/TACZ-1.20.1/build.gradle）
+    // 这些库从 Maven 正常取得，用 shadow 打进 jar；relocateShadowedDependencies = false，
+    // 因为 luaj / bcel 依赖自身的包名做反射与字节码生成，重定位会直接把它们废掉。
+    // ---------------------------------------------------------------------------------------------
 
+    // JOML：矩阵/四元数数学库。上游 gltf 动画、bedrock 模型与渲染全部依赖它。
+    // 对应上游 net.minecraft 自带的 org.joml（1.20 自带，1.7.10 没有）。
+    shadowImplementation("org.joml:joml:1.10.5")
 
+    // commons-math3：上游用它做插值（Spline 曲线等）。
+    shadowImplementation("org.apache.commons:commons-math3:3.6.1")
 
+    // LuaJ (Figura fork)：枪械逻辑与动画状态机的 Lua 脚本。
+    shadowImplementation("com.github.FiguraMC.luaj:luaj-core:3.0.8-figura") {
+        exclude group: 'org.apache.commons', module: 'commons-lang3'
+    }
+    shadowImplementation("com.github.FiguraMC.luaj:luaj-jse:3.0.8-figura") {
+        exclude group: 'org.apache.commons', module: 'commons-lang3'
+    }
+    // luaj 的 Java 编译器后端
+    shadowImplementation("org.apache.bcel:bcel:6.6.1") {
+        exclude group: 'org.apache.commons', module: 'commons-lang3'
+    }
 
-
-
+    // JetBrains 注解（上游大量使用 @NotNull / @Nullable），仅编译期
+    compileOnly("org.jetbrains:annotations:24.1.0")
 }
 
 @SuppressWarnings('GrMethodMayBeStatic')
 String gtnhDev(String name, String classifier = "dev") {
     return elytraModpackVersion.gtnh(name, classifier)
 }
-

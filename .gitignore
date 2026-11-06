@@ -39,3 +39,9 @@ addon.local.gradle.kts
 addon.late.local.gradle
 addon.late.local.gradle.kts
 layout.json
+
+# 评审截图：仅本地保留，不入库（untracked + ignored）
+docs/review/**/screenshots/
+
+# 评审测试枪包贴图：仅本地保留，不入库（untracked + ignored）
+docs/review/r7/test-pack/**/*.png

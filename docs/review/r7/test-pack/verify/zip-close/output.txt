@@ -1,0 +1,21 @@
+# 修复前（git HEAD 的 ZipGunPackSource，源码在临时目录编译为 oldzip.OldZipGunPackSource）
+# 复现脚本 R7ZipRaceDemo：读到第 8 字节后调用 close()，再继续读到 EOF
+
+[old] first read = 8
+[old] RESULT: 跨 close() 读取失败 -> java.io.IOException: Stream closed
+
+
+# 修复后（当前 src/main/java/.../pack/ZipGunPackSource.java，先单独编译到 out2 前置到 classpath）
+# 验证脚本 R7ZipCloseTest
+
+[PASS] listFiles 命中 2 个条目
+[PASS] open 成功
+[PASS] 读到开头 8 字节
+[PASS] close() 后不再借出新流
+[PASS] 跨 close() 的在读流仍能读到 EOF（总字节 58）
+[PASS] 最后一个读者离开后 zip 句柄已释放（文件可删除）
+RESULT: ALL PASS
+
+# 复跑：javac -cp <运行期classpath> -d out2 <repo>/src/main/java/com/tacz/guns/resource/pack/ZipGunPackSource.java
+#       javac -cp "<运行期classpath>;out2" -d out2 R7ZipCloseTest.java
+#       java  -cp "out2;<运行期classpath>" R7ZipCloseTest（工作目录需可写）

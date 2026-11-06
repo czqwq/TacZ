@@ -12,4 +12,18 @@ repositories { handler ->
             includeGroup('net.glease')
         }
     }
+
+    // LuaJ (Figura fork) 与 simplebedrockmodel 的源码来源。上游从 jitpack 取得。
+    exclusiveContent {
+        forRepository {
+            handler.maven {
+                name = 'jitpack'
+                url = 'https://jitpack.io'
+            }
+        }
+        filter {
+            includeGroup('com.github.FiguraMC.luaj')
+            includeGroup('com.github.mcmodderanchor')
+        }
+    }
 }

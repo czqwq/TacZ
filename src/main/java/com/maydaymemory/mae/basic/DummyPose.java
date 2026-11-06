@@ -1,0 +1,19 @@
+// Vendored from mae 1.1.4 (com.maydaymemory:mae), the animation-evaluation library that
+// simplebedrockmodel 2.6.1 bundles via JarJar. Upstream ships no source distribution, so this
+// file is a faithful decompilation (IntelliJ Fernflower) of the published 1.1.4 bytecode.
+// upstream class: com.maydaymemory.mae.basic.DummyPose
+// 1.7.10 port: unchanged (pure Java, depends only on JOML) - no TODO(L2) markers needed.
+package com.maydaymemory.mae.basic;
+
+import java.util.Collections;
+
+public final class DummyPose implements Pose {
+
+    public static final DummyPose INSTANCE = new DummyPose();
+
+    private DummyPose() {}
+
+    public Iterable<BoneTransform> getBoneTransforms() {
+        return Collections.emptyList();
+    }
+}

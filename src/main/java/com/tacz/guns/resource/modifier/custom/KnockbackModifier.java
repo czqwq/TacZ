@@ -1,0 +1,149 @@
+package com.tacz.guns.resource.modifier.custom;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+
+import javax.annotation.Nullable;
+
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.ChatComponentTranslation;
+import net.minecraft.util.ChatStyle;
+import net.minecraft.util.EnumChatFormatting;
+
+import com.google.gson.annotations.SerializedName;
+import com.tacz.guns.api.GunProperties;
+import com.tacz.guns.api.item.IGun;
+import com.tacz.guns.api.item.gun.FireMode;
+import com.tacz.guns.api.modifier.CacheValue;
+import com.tacz.guns.api.modifier.IAttachmentModifier;
+import com.tacz.guns.api.modifier.JsonProperty;
+import com.tacz.guns.mcshim.Mth;
+import com.tacz.guns.resource.CommonAssetsManager;
+import com.tacz.guns.resource.modifier.AttachmentCacheProperty;
+import com.tacz.guns.resource.modifier.AttachmentPropertyManager;
+import com.tacz.guns.resource.pojo.data.attachment.Modifier;
+import com.tacz.guns.resource.pojo.data.gun.BulletData;
+import com.tacz.guns.resource.pojo.data.gun.GunData;
+import com.tacz.guns.resource.pojo.data.gun.GunFireModeAdjustData;
+
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
+
+public class KnockbackModifier implements IAttachmentModifier<Modifier, Float> {
+
+    public static final String ID = GunProperties.KNOCKBACK.name();
+
+    @Override
+    public String getId() {
+        return ID;
+    }
+
+    @Override
+    public JsonProperty<Modifier> readJson(String json) {
+        Data data = CommonAssetsManager.GSON.fromJson(json, Data.class);
+        return new KnockbackJsonProperty(data.getKnockback());
+    }
+
+    @Override
+    public CacheValue<Float> initCache(ItemStack gunItem, GunData gunData) {
+        // 必要数据获取
+        IGun iGun = Objects.requireNonNull(IGun.getIGunOrNull(gunItem));
+        FireMode fireMode = iGun.getFireMode(gunItem);
+        BulletData bulletData = gunData.getBulletData();
+        GunFireModeAdjustData fireModeAdjustData = gunData.getFireModeAdjustData(fireMode);
+
+        // 开火模式调整
+        // 最终的 base
+        float finalBase = bulletData.getKnockback();
+        finalBase = fireModeAdjustData != null ? finalBase + fireModeAdjustData.getKnockback() : finalBase;
+        return new CacheValue<>(finalBase);
+    }
+
+    @Override
+    public void eval(List<Modifier> modifiers, CacheValue<Float> cache) {
+        double eval = AttachmentPropertyManager.eval(modifiers, cache.getValue());
+        cache.setValue((float) eval);
+    }
+
+    @Override
+    @SideOnly(Side.CLIENT)
+    public List<DiagramsData> getPropertyDiagramsData(ItemStack gunItem, GunData gunData,
+        AttachmentCacheProperty cacheProperty) {
+        // 必要数据获取
+        IGun iGun = Objects.requireNonNull(IGun.getIGunOrNull(gunItem));
+        FireMode fireMode = iGun.getFireMode(gunItem);
+        BulletData bulletData = gunData.getBulletData();
+        GunFireModeAdjustData fireModeAdjustData = gunData.getFireModeAdjustData(fireMode);
+
+        // 开火模式调整
+        // 最终的 base
+        float finalBase = bulletData.getKnockback();
+        finalBase = fireModeAdjustData != null ? finalBase + fireModeAdjustData.getKnockback() : finalBase;
+
+        float modifiedValue = cacheProperty.<Float>getCache(KnockbackModifier.ID);
+        float modifier = modifiedValue - finalBase;
+
+        double percent = Mth.clamp(finalBase, 0, 1);
+        double modifierPercent = Mth.clamp(modifier, 0, 1);
+
+        String titleKey = "gui.tacz.gun_refit.property_diagrams.knockback";
+        String positivelyString = String.format("%.2f §a(+%.2f)", modifiedValue, modifier);
+        String negativelyString = String.format("%.2f §c(%.2f)", modifiedValue, modifier);
+        String defaultString = String.format("%.2f", modifiedValue);
+        boolean positivelyBetter = true;
+
+        DiagramsData diagramsData = new DiagramsData(
+            percent,
+            modifierPercent,
+            modifier,
+            titleKey,
+            positivelyString,
+            negativelyString,
+            defaultString,
+            positivelyBetter);
+        return Collections.singletonList(diagramsData);
+    }
+
+    @Override
+    @SideOnly(Side.CLIENT)
+    public int getDiagramsDataSize() {
+        return 1;
+    }
+
+    public static class KnockbackJsonProperty extends JsonProperty<Modifier> {
+
+        public KnockbackJsonProperty(Modifier value) {
+            super(value);
+        }
+
+        @Override
+        public void initComponents() {
+            Modifier value = this.getValue();
+            if (value != null) {
+                double eval = AttachmentPropertyManager.eval(value, 0.2);
+                if (eval > 0.2) {
+                    components.add(
+                        new ChatComponentTranslation("tooltip.tacz.attachment.knockback.increase")
+                            .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GREEN)));
+                } else if (eval < 0.2) {
+                    components.add(
+                        new ChatComponentTranslation("tooltip.tacz.attachment.knockback.decrease")
+                            .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.RED)));
+                }
+            }
+        }
+    }
+
+    public static class Data {
+
+        @SerializedName("knockback")
+        @Nullable
+        private Modifier knockback = null;
+
+        @Nullable
+        public Modifier getKnockback() {
+            return knockback;
+        }
+    }
+}

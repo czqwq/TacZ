@@ -1,0 +1,27 @@
+{
+  "state_machine": "tacz:default_state_machine_v2",
+  "ads_preset": "tacz:renew",
+  "model": "tacz_review_pack:gun/review_pistol_geo",
+  "texture": "tacz_review_pack:gun/uv/review_pistol",
+  "slot": "tacz_review_pack:gun/slot/review_pistol",
+  "use_default_animation": "pistol",
+  "transform": {
+    "scale": {
+      "thirdperson": [0.6, 0.6, 0.6],
+      "ground": [0.6, 0.6, 0.6],
+      "fixed": [1.2, 1.2, 1.2]
+    }
+  },
+  "offhand_show": {
+    "pos": [4, 13, -1],
+    "rotate": [-90, -35, 90],
+    "scale": [0.5, 0.5, 0.5]
+  },
+  "hotbar_show": {
+    "0": {
+      "pos": [-5, 13, -1],
+      "rotate": [-90, -35, 90],
+      "scale": [0.5, 0.5, 0.5]
+    }
+  }
+}

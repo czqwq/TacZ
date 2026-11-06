@@ -1,0 +1,32 @@
+[PASS] 枪包目录存在
+[scan] source = tacz_review_pack
+[scan] gun data ids = [tacz_review_pack:review_pistol_data]
+[PASS] data/guns 下扫到 review_pistol_data
+[PASS] gun data 已装载
+[PASS] ammo id = tacz_review_pack:review_9mm
+[PASS] rpm = 320
+[PASS] bulletData 非 null
+[PASS] fireModeSet = [SEMI]
+[PASS] reload.type 非 null
+[scan] gun index ids = [tacz_review_pack:review_pistol]
+[PASS] gun index pojo 已解析
+[PASS] gun index 已装载
+[PASS] type = pistol
+[PASS] gunData 已挂到 index
+[PASS] gun display 已解析
+[scan] geo ids = [tacz_review_pack:gun/review_pistol_geo]
+[scan] texture paths = [assets/tacz_review_pack/textures/ammo/slot/review_9mm.png, assets/tacz_review_pack/textures/gun/slot/review_pistol.png, assets/tacz_review_pack/textures/gun/uv/review_pistol.png]
+[PASS] display.model 指向的 geo 已索引 = tacz_review_pack:gun/review_pistol_geo
+[PASS] display.texture 指向的 png 存在 = tacz_review_pack:gun/uv/review_pistol
+[PASS] display.slot 指向的 png 存在 = tacz_review_pack:gun/slot/review_pistol
+[PASS] ammo display 已解析
+[PASS] geo model 已解析
+[PASS] format_version = 1.12.0
+[PASS] 新版 geometry 已解析
+[PASS] bones 数量 = 3
+[PASS] texture 尺寸 = 16x16
+[PASS] root 骨骼存在
+[PASS] zip 版 data/guns 与目录版一致
+[PASS] zip 版 index/guns 与目录版一致
+[PASS] 带 // 注释的 json 能被 lenient 解析
+RESULT: ALL PASS

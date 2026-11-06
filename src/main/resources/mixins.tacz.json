@@ -1,0 +1,34 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.tacz.guns.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "refmap": "mixins.tacz.refmap.json",
+  "mixins": [
+    "common.LivingEntityMixin",
+    "common.LivingEntityKnockbackMixin",
+    "common.ServerPlayerMixin",
+    "common.ServerGamePacketListenerImplMixin",
+    "common.ContainerMixin",
+    "common.EntityTravelToDimensionMixin"
+  ],
+  "client": [
+    "client.LocalPlayerMixin",
+    "client.MouseHandlerMixin",
+    "client.MinecraftAttackMixin",
+    "client.ItemInHandRendererMixin",
+    "client.ItemInHandLayerMixin",
+    "client.GameRendererMixin",
+    "client.HumanoidModelMixin",
+    "client.PlayerModelMixin",
+    "client.CreativeModeInventoryScreenMixin",
+    "client.AbstractButtonMixin",
+    "client.CreativeContainerAccessor",
+    "client.EntityRenderDispatcherMixin",
+    "client.PlayerCrawlPoseMixin",
+    "client.EntityRendererCrawlCameraMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
