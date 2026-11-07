@@ -88,8 +88,8 @@ public class GunSmithTableRecipeHandler extends TemplateRecipeHandler {
         // 而那时本类的 blockId/handlerId 字段还没有赋值（Java 先 super() 后字段初始化）。
         // 本 rect 不注册到任何 GUI（getRecipeTransferRectGuis() = null），只需要留在 transferRects 里
         // 供 getUsageAndCatalystHandler / 点击箭头时读取，所以在构造完成后补登即可。
-        this.transferRects.add(
-            new RecipeTransferRect(new Rectangle(ARROW_X, ARROW_Y, ARROW_WIDTH, ARROW_HEIGHT), handlerId));
+        this.transferRects
+            .add(new RecipeTransferRect(new Rectangle(ARROW_X, ARROW_Y, ARROW_WIDTH, ARROW_HEIGHT), handlerId));
     }
 
     /**
@@ -207,7 +207,7 @@ public class GunSmithTableRecipeHandler extends TemplateRecipeHandler {
     @Override
     public void loadCraftingRecipes(String outputId, Object... results) {
         // "all" 是 NEI 的「全部配方」页；handlerId 是 transferRect 的 outputId
-        //（点箭头 / 对工作台物品按 U 看该工作台全部配方时走这里）。
+        // （点箭头 / 对工作台物品按 U 看该工作台全部配方时走这里）。
         if ("all".equals(outputId) || handlerId.equals(outputId)) {
             for (GunSmithTableRecipe recipe : getTableRecipes()) {
                 arecipes.add(new CachedGunSmithRecipe(recipe));

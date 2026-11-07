@@ -290,8 +290,7 @@ public class ClientProxy extends CommonProxy {
         // NEI 缺席时 `checkModLoad` 直接跳过，不加载 `compat.nei` 的任何类（保持可选依赖语义）。
         CompatRegistry.checkModLoad(
             "NotEnoughItems",
-            () -> CompatRegistry
-                .invokeOptional("com.tacz.guns.compat.nei.NeiHandlerInfos", "registerListener"));
+            () -> CompatRegistry.invokeOptional("com.tacz.guns.compat.nei.NeiHandlerInfos", "registerListener"));
     }
 
     @Override

@@ -113,7 +113,9 @@ public final class NeiHandlerInfos {
             // 与 NEIRegisterHandlerInfosEvent#registerHandlerInfo 的实现一致（该方法只做这一件事）。
             GuiRecipeTab.handlerMap.put(info.getHandlerName(), info);
         }
-        GunMod.LOGGER.info("[TACZ] NEI handler infos applied: {} (reload listener: {})", infos.size(),
+        GunMod.LOGGER.info(
+            "[TACZ] NEI handler infos applied: {} (reload listener: {})",
+            infos.size(),
             listenerRegistered ? "on" : "off");
     }
 
@@ -131,7 +133,10 @@ public final class NeiHandlerInfos {
         String modName = modName();
         List<HandlerInfo> infos = new ArrayList<>();
         for (ResourceLocation tableId : GunSmithTableRecipeHandler.tableBlockIds()) {
-            addInfo(infos, modName, GunSmithTableRecipeHandler.handlerIdFor(tableId),
+            addInfo(
+                infos,
+                modName,
+                GunSmithTableRecipeHandler.handlerIdFor(tableId),
                 GunSmithTableRecipeHandler.tableIconFor(tableId));
         }
         addInfo(infos, modName, GunAmmoQueryHandler.HANDLER_ID, firstGunStack());
