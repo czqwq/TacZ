@@ -1940,7 +1940,7 @@ CallbackInfoReturnable is required!
 >    `@Redirect` = `(被调用方法的 owner 类型, 原参数…)`；`@ModifyArg` = `(被修改的那个参数类型)`；
 >    `@ModifyVariable` = `(该局部变量类型)`；`@Accessor`/`@Invoker` 各自另有签名约束。
 
-### 19 文件「目标返回类型 → 回调信息类型」全量核对（逐条抄自 `build/rfg/minecraft-src`）
+### 111 文件「目标返回类型 → 回调信息类型」全量核对（逐条抄自 `build/rfg/minecraft-src`）
 
 | Mixin | 目标方法（含 1.7.10 返回类型） | 回调末尾类型 | 结论 |
 |---|---|---|---|
@@ -3741,3 +3741,64 @@ cam = (prev + d) + ((rotation + d) - (prev + d)) * partialTicks = lerp(prev, rot
    `GunRecoil#getSplineFunction` 在 `keyFrames.length < 2` 时与空数组一样返回 `null`
    （消费方 `CameraSetupEvent#applyCameraRecoil` 本就判空，合法数据行为不变）。记录：`docs/review/r8/README.md`「判定不是 bug」§4。
 3. 构建自检：`./gradlew spotlessApply compileJava` = BUILD SUCCESSFUL（2026-11-07）。
+
+### r8 追加 · NEI 联动（2026-11-07，Lead）
+
+上游 1.20.1 用 JEI 提供「配方显示 + 枪械/弹药/配件兼容性查询」；1.7.10 没有 JEI，等价物是 NEI
+（NotEnoughItems，GTNH 版）。本轮实装 `src/main/java/com/tacz/guns/compat/nei/`（11 文件）：
+
+1. **入口**：`NEITaczConfig implements codechicken.nei.api.IConfigureNEI`。NEI 用 CCC `ClassDiscoverer`
+   扫描「类名 `NEI*Config` + 实现 `IConfigureNEI`」的类自动加载，因此**类名不可改**；插件在进入世界后加载，
+   数据已由 `CommonAssetsManager` 同步完毕。
+2. **上游 JEI 5 个分类 → NEI handler**：
+   - `GunSmithTableCategory`（每个 `CommonBlockIndex`）→ `GunSmithTableRecipeHandler`（每个工作台实例，
+     过滤规则逐条对齐 `RecipeFilter` + `BlockData#getTabs()`，注册 R/U 双向 + 工作台催化剂）；
+   - `GunAmmoQueryCategory`/`AmmoQueryCategory` → `GunAmmoQueryHandler`/`AmmoQueryHandler`（共用一份
+     枪↔弹药映射，双向结果一致）；
+   - `AttachmentQueryCategory`/`GunAttachmentQueryCategory` → `AttachmentQueryHandler`/
+     `GunAttachmentQueryHandler`（按 `GunTabType`/`AttachmentType` 分组，`IGun#allowAttachment` 判定）；
+   - 另外补 `AmmoStorageUpgradeHandler`：上游 JEI 把弹药库升级配方展开成原版 shaped 配方合入 CRAFTING，
+     NEI 内置 handler 不认自定义 `IRecipe`，故单开一页展示同样的 3×3。
+3. **子类型等价物**：`NeiItemVariants` 用 `API#setItemListEntries` 把枪/弹药/配件/工作台/弹药盒的 NBT
+   变体注入 NEI 物品面板（否则面板里只有无 NBT 的裸物品，R 查不到配方）；枪包数据未就绪时绝不覆盖。
+4. **数据与缓存**：`NeiQueryData` 计算枪↔弹药、枪↔配件快照（配件兼容性约 1.7 万次判定），按索引 id 哈希 +
+   数量做指纹缓存，插件加载时预热一次；`/tacz reload` 改变 id 集合会自动重建。
+5. **绘制**：`NeiRender` 自绘 MC 风格面板/物品槽/箭头（不新增贴图、不改 NEI 的 handlers.csv），
+   页面尺寸保持 NEI 默认 166×65；列表页每页 18 个（上游 JEI 54，属可接受差异）。
+6. **依赖**：`dependencies.gradle` 增加 `implementation(gtnhDev("NotEnoughItems"))`（CCC 由 NEI 传递依赖
+   带出）；NEI 缺席时 `compat.nei` 的类不会被加载（纯可选依赖，服务端/无 NEI 客户端零风险）。
+7. **未实现（记录）**：工作台 GUI 内嵌 overlay 与「一键填材料」（NEI `IOverlayHandler`/`IStackPositioner`
+   体系，需为 3 种工作台 GUI 各算槽位映射）；`GunPegboardDyeRecipe` 配方页（上游 JEI 同样不展示）。
+8. 构建自检：`./gradlew spotlessApply compileJava` = **BUILD SUCCESSFUL**（2026-11-07）。
+   完整报告与实机验证清单：`docs/review/r8/nei.md`。
+
+#### r8 追加 · NEI 首次进游戏报错修复（2026-11-07 实机五轮，Lead）
+
+首次实机（NEI 2.8.x）暴露并已修：
+
+1. **`NoSuchMethodException: GunSmithTableRecipeHandler.<init>()`**（每个 NEI worker 线程刷、配方查询全挂）：
+   NEI `TemplateRecipeHandler#newInstance()` 用反射**无参构造器**复制 handler，而工作台 handler 构造器带
+   `blockId`。改为覆写 `newInstance()` 返回携带同一 `blockId` 的新实例（NEI 官方扩展点，同 GT5U
+   `GTNEIDefaultHandler#newInstance()`）。
+2. **催化剂 U 查询（"category 没有绑定工作台"）**：`getUsageAndCatalystHandler()` 命中催化剂后要求 handler 的
+   `transferRects` 非空，否则只打 `failed to load catalyst handler, implement loadTransferRects` 并退化成空页。
+   工作台/弹药库 handler 各登记一条「箭头区域 → 全部配方」的 `RecipeTransferRect`（outputId = handler id），
+   同时支持点击箭头看该工作台全部配方。注意 `TemplateRecipeHandler` 构造器会调 `loadTransferRects()`，
+   那时子类实例字段还没初始化 —— 携带 `blockId` 的 rect 在构造器体内补登。
+3. **页签 mod 显示 `Unknown`、无图标**：NEI 页签信息来自 `GuiRecipeTab.handlerMap`；NEI 在 `FMLLoadCompleteEvent`
+   就发 `NEIRegisterHandlerInfosEvent`，而本插件要等进世界才由 NEI 后台线程实例化，且该 map 只能由客户端线程写。
+   新增 `NeiHandlerInfos`：① `ClientProxy#init` 里（NEI 已安装时经 `CompatRegistry` 反射）提前
+   `registerListener()`，接住 LoadComplete 的 handler 信息事件；② `loadConfig()` 里用
+   `Minecraft#func_152344_a`（`addScheduledTask`）投递到客户端主线程，用真实枪包数据刷新页签图标 + 真实
+   mod 名并写 `handlerMap`。同时隐藏压住格子的 overlay/收藏按钮。
+4. **顺带修**：`AmmoStorageUpgradeHandler` 页名用了 1.7.10 不存在的 `tacz.block.ammo_storage.name`（1.7.10 是
+   `tile.tacz.ammo_storage.name`）→ 改用方块物品 `getDisplayName()`；`AttachmentQueryHandler` 页脚错用
+   `jei.tacz.ammo_query.page` → 改用上游的 `jei.tacz.attachment_query.more`。
+5. **NEI 无关但同轮修复：开镜崩溃**（`BufferUnderflowException`，`RangefinderImpactPredictionRender#projectGuiY`
+   ← `mcshim/RenderSystem#getProjectionMatrix()`）：1.7.10 的 `GL11#glGetFloat` 不推进 buffer position
+   （vanilla `ClippingHelperImpl#init` 因而写成 `clear() → glGetFloat → flip().limit(16)`），原实现只 `flip()`
+   ⇒ 返回空 buffer，`get(float[16])` 抛 `BufferUnderflowException`。改为 `flip().limit(16)`，并在
+   `projectGuiY` 加 buffer 不足时的 NaN 防御。该路径只在「激光测距仪 + 开镜」时触发。
+
+代码：`src/main/java/com/tacz/guns/compat/nei/NeiHandlerInfos.java`（新）+ 上述 handler 修改；
+详细记录：`docs/review/r8/nei.md` §7、`docs/review/r8/README.md` 追加（实机五轮）#16/#17。

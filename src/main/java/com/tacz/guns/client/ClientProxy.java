@@ -279,6 +279,19 @@ public class ClientProxy extends CommonProxy {
         if (System.getProperty(com.tacz.debug.DevBridge.PROP_PORT) != null) {
             com.tacz.debug.DevBridge.startIfEnabled();
         }
+
+        // 12) NEI 联动：把配方页签信息（NEI `HandlerInfo`：图标 + mod 名）的监听器提前挂到 Forge 总线。
+        //
+        // 为什么必须在 init 阶段（而不是等 NEI 插件加载）：NEI 在 FMLLoadCompleteEvent 就
+        // `GuiRecipeTab.loadHandlerInfo()` 并 post `NEIRegisterHandlerInfosEvent`，而本模组的 NEI 插件
+        // 要等**进世界**后由 NEI 后台线程实例化（那时注册监听器已晚）；并且 Forge 1.7.10 的
+        // `EventBus#register` 会读 `Loader#activeModContainer()`，在 mod 加载期之外调用会刷一条
+        // "Unable to determine registrant mod" 的 ERROR。
+        // NEI 缺席时 `checkModLoad` 直接跳过，不加载 `compat.nei` 的任何类（保持可选依赖语义）。
+        CompatRegistry.checkModLoad(
+            "NotEnoughItems",
+            () -> CompatRegistry
+                .invokeOptional("com.tacz.guns.compat.nei.NeiHandlerInfos", "registerListener"));
     }
 
     @Override

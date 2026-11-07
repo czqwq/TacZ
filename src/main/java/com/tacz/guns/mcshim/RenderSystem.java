@@ -333,6 +333,14 @@ public final class RenderSystem {
     /**
      * 对应 1.20 {@code RenderSystem#getModelViewMatrix()}：读取当前 GL_MODELVIEW。
      *
+     * <p>
+     * <b>1.7.10 坑（实测崩溃：{@code BufferUnderflowException}）</b>：LWJGL2 的
+     * {@code GL11#glGetFloat(int, FloatBuffer)} <b>只把数据写到 buffer 当前位置、不推进 position</b>
+     * （vanilla {@code ClippingHelperImpl#init} 因此写成 {@code clear() → glGetFloat → flip().limit(16)}，
+     * 见 {@code build/rfg/minecraft-src/java/net/minecraft/client/renderer/culling/ClippingHelperImpl.java:42-50}）。
+     * 只调 {@code flip()} 会把 limit 设成 position=0 ⇒ 返回空 buffer，调用方 {@code get(float[16])} 直接崩。
+     * 这里照抄 vanilla 的 {@code flip().limit(16)}，两种语义（推不推进 position）下都能得到 16 个有效元素。
+     *
      * @return 只读快照（长度 16，列主序）
      */
     public static FloatBuffer getModelViewMatrix() {
@@ -341,12 +349,16 @@ public final class RenderSystem {
         MODEL_VIEW_CACHE.clear();
         GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, MODEL_VIEW_CACHE);
         MODEL_VIEW_CACHE.flip();
+        MODEL_VIEW_CACHE.limit(16);
         GL11.glMatrixMode(previous);
         return MODEL_VIEW_CACHE;
     }
 
     /**
      * 对应 1.20 {@code RenderSystem#getProjectionMatrix()}：读取当前 GL_PROJECTION。
+     *
+     * <p>
+     * buffer position 语义同 {@link #getModelViewMatrix()}（{@code flip().limit(16)}）。
      */
     public static FloatBuffer getProjectionMatrix() {
         int previous = GL11.glGetInteger(GL11.GL_MATRIX_MODE);
@@ -354,6 +366,7 @@ public final class RenderSystem {
         PROJECTION_CACHE.clear();
         GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, PROJECTION_CACHE);
         PROJECTION_CACHE.flip();
+        PROJECTION_CACHE.limit(16);
         GL11.glMatrixMode(previous);
         return PROJECTION_CACHE;
     }

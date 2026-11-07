@@ -117,6 +117,12 @@ public class RangefinderImpactPredictionRender implements IFunctionalRenderer {
         point.mul(pose);
 
         FloatBuffer projection = RenderSystem.getProjectionMatrix();
+        // 防御：1.7.10 的投影矩阵是向 GL 反查的（1.20 是 CPU 侧缓存），若缓冲区异常（长度不足 16）
+        // 就返回 NaN 交给 getCalibratedYOffset 的 fallback 分支，避免 FloatBuffer#get 抛
+        // BufferUnderflowException 把客户端直接崩掉（实机开镜时已出现过，根因见 mcshim/RenderSystem）。
+        if (projection == null || projection.remaining() < 16) {
+            return Float.NaN;
+        }
         float[] m = new float[16];
         projection.duplicate()
             .get(m);

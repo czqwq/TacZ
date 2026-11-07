@@ -41,6 +41,9 @@
 
 `./gradlew spotlessApply build` = **BUILD SUCCESSFUL**（2026-11-06 22:25，`build/libs/tacz-5.11.45.140.jar`）。
 
+> 2026-11-07 增补：近战/自定义枪包修复后由用户侧构建/实机验证（commit `e58799e Fix Melee Attacking logic`）；
+> NEI 联动本轮只做 `./gradlew spotlessApply compileJava` 自检（= BUILD SUCCESSFUL），完整 `build` 交由用户。
+
 ## 实机验证清单
 
 1. 弹药库（铁/金/钻石）、武器盒、枪架（普通/发光）世界模型 = 完整 3D + 贴图正确；武器盒 4×4 拼墙出边框、潜行切锁玻璃消失；丢地上 3D。
@@ -50,6 +53,10 @@
 5. 长 tooltip（配件/带 lore）鼠标在屏幕左下/右下均完整、自动换行不裁切。
 6. 创造栏单包：左侧 ALL/枪包按钮消失、列表滚动/点击正常。
 7. 回归：枪械/瞄具/原有方块渲染无异常。
+8. **NEI 联动**（详见 [nei.md](nei.md) §4/§7）：物品面板能搜到具体枪/弹药/配件；对枪按 R 出工作台配方页 +
+   弹药/配件查询页；对弹药/配件按 R 出适用列表；对材料/弹药/工作台按 U 出 usage 页；分页与 tab 过滤正确；
+   页签 tooltip 的 mod 名不是 `Unknown` 且页签有物品图标；日志无 `NoSuchMethodException` / NEI 配方查询错误。
+9. **激光测距仪**：装测距仪后开镜不崩（弹着点预测方框正常，无 `BufferUnderflowException`）；关镜/切枪/退出重进各试一次。
 ## 启动冒烟验证（Lead，2026-11-06 23:08）
 
 用 `./gradlew runClient` 完整启动一次客户端（主菜单到达后关闭），验证 Mixin/初始化不崩：
@@ -59,7 +66,7 @@
   `Mixing client.GuiScreenMixin ... into net.minecraft.client.gui.GuiScreen`、
   `tacz$renderItemTooltip/tacz$renderListTooltip/tacz$renderCreativeTabTooltip ... does use it's CallbackInfo`）；
 - `mixins.tacz.json` 共 preparing 21 项、无 `Mixin apply failed`；`[TACZ] client setup finished`（23:08:52），
-  资源包索引 3409 文件，无 TACZ 异常；无新增 crash-report；
+  资源包索引 34011 文件，无 TACZ 异常；无新增 crash-report；
   仅有既有的 `org.joml module-info.class` FML 警告（与本次改动无关）。
 - 说明：`CreativeModeInventoryScreenMixin` / `CreativeContainerAccessor` / `AbstractButtonMixin` 的目标类
   （`GuiContainerCreative`、`GuiButton`）**在进入创造模式物品栏时才被加载**，冒烟启动（只到主菜单）未触发
@@ -116,3 +123,22 @@
 | `Vec3#addVector` | 返回新向量（`this + (x,y,z)`，不改自身） | 无同名方法（1.20 用 `add`）；语义等价 | 无 |
 
 > 结论：凡是移植代码里出现 `Vec3#subtract`，必须逐个确认方向（本轮已全部改为按分量显式相减并加注释）。
+
+### 追加（2026-11-07 · NEI 联动，替代上游 JEI）
+
+| # | 需求 | 实现 | 记录 |
+|---|------|------|------|
+| 15 | 上游 1.20.1 在 JEI 里提供「配方显示 + 枪械/弹药/配件兼容性查询」；1.7.10 没有 JEI，需要 NEI 等价物 | 新增 `compat/nei/`（11 文件）：`NEITaczConfig`（`IConfigureNEI`，按 NEI 类名规则 `NEI*Config` 被自动发现）注册 3 个工作台配方 handler（R/U + 催化剂）+ 4 个查询 handler（枪↔弹药、弹药↔枪械、配件↔枪械、枪↔配件，R/U 双向）+ 弹药库升级配方页；`NeiItemVariants` 用 `API#setItemListEntries` 注入枪/弹药/配件/工作台/弹药盒的 NBT 变体（上游 `registerItemSubtypes` 的等价物）；`NeiQueryData` 做指纹缓存 + 插件加载时预热（约 1.7 万次兼容性判断） | [nei.md](nei.md) |
+
+- 依赖：`dependencies.gradle` 增加 `implementation(gtnhDev("NotEnoughItems"))`（CCC 由 NEI 传递依赖带出）；
+  NEI 缺席时相关类不会被加载（可选依赖，无 `NoClassDefFoundError` 风险）。
+- 自检：`./gradlew spotlessApply compileJava` = **BUILD SUCCESSFUL**（2026-11-07）。
+- 未实现（记录在 [nei.md](nei.md) §5）：工作台 GUI 内嵌 overlay / 一键转移材料（NEI `IOverlayHandler` 体系）、
+  查询页每页 18 个（上游 JEI 54）、未自定义 `handlers.csv` 高度。
+
+### 追加（2026-11-07 实机五轮 · NEI 首次进游戏报错 + 开镜崩溃）
+
+| # | 现象 | 根因 | 修复 | 记录 |
+|---|------|------|------|------|
+| 16 | NEI 每个 worker 线程刷 `NoSuchMethodException: com.tacz.guns.compat.nei.GunSmithTableRecipeHandler.<init>()`、聊天栏 `There was error during loading recipe`(×8)；工作台配方页/催化剂 U 查询不可用；页签 mod 显示 `Unknown`、无图标 | ① NEI `TemplateRecipeHandler#newInstance()` 用**反射无参构造器**复制 handler，而工作台 handler 构造器带 `blockId`；② 催化剂 U 查询还要求 `transferRects` 非空（否则 NEI 打 `failed to load catalyst handler, implement loadTransferRects` 并退化成空页）；③ 页签信息（mod 名/图标）来自 `GuiRecipeTab.handlerMap`，未登记即 `DEFAULT_HANDLER_INFO(modName="Unknown")`，而 NEI 的 handler 信息事件在 `FMLLoadCompleteEvent` 就发了（早于本插件在世界加载时实例化），且该 map 只能由客户端线程写 | ① 覆写 `newInstance()` 返回携带同一 `blockId` 的新实例（NEI 官方扩展点，同 GT5U `GTNEIDefaultHandler`）；② 工作台/弹药库 handler 登记 `RecipeTransferRect`（箭头区域 → 全部配方）；③ 新增 `NeiHandlerInfos`：`ClientProxy#init` 里（NEI 已安装时经 `CompatRegistry` 反射）提前挂 `NEIRegisterHandlerInfosEvent` 监听器，`loadConfig()` 里再用 `Minecraft#func_152344_a` 投递到客户端线程、以真实枪包数据刷新页签图标与 mod 名；顺带修 `AmmoStorageUpgradeHandler` 页名用了 1.7.10 不存在的 lang 键、`AttachmentQueryHandler` 页脚错用 ammo 的 page 键 | [nei.md](nei.md) §7 |
+| 17 | YSMU 测试**开镜瞬间崩溃**：`java.nio.BufferUnderflowException` ← `FloatBuffer#get(float[])` ← `RangefinderImpactPredictionRender#projectGuiY(:122)` ← `getCalibratedYOffset` ← 激光测距仪的弹着点预测渲染 | `mcshim/RenderSystem#getProjectionMatrix()` 读 GL 投影矩阵后只调 `flip()`：1.7.10（LWJGL2）的 `GL11#glGetFloat(int, FloatBuffer)` **不推进 buffer position**（vanilla `ClippingHelperImpl#init` 正是因此写成 `clear() → glGetFloat → flip().limit(16)`，`build/rfg/minecraft-src/.../ClippingHelperImpl.java:42-50`），只 `flip()` ⇒ limit=position=0 ⇒ 返回空 buffer，调用方 `get(float[16])` 直接 `BufferUnderflowException`。该路径只在「装激光测距仪 + 开镜」时走到，所以正常游玩无感 | `RenderSystem#getModelViewMatrix/getProjectionMatrix` 改为 vanilla 的 `flip().limit(16)`（两种 position 语义下都得到 16 个有效元素）；`RangefinderImpactPredictionRender#projectGuiY` 加防御：buffer 不足 16 时返回 NaN 走既有 fallback，不再崩客户端 | 本节 + `PORT_STATUS.md` |

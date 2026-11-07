@@ -30,9 +30,11 @@ import cpw.mods.fml.common.Loader;
  * {@link #getPluginUid()} 保留上游实现（返回 {@code tacz:jei}）。
  *
  * <p>
- * TODO(L2, NEI): 若日后要接 NEI，需要新写 {@code codechicken.nei.api.INEIRecipeHandler} 实现
- * —— 上游可复用的<b>数据</b>语义是 {@code entry/*} 里那 5 个类（枪械↔弹药、配件↔枪械的兼容性查询），
- * 它们在 1.7.10 侧应由 {@code TimelessAPI} 的索引直接派生，不需要 JEI 类型。
+ * <b>NEI（1.7.10 的等价物）已实装</b>：见 {@code com.tacz.guns.compat.nei}（入口
+ * {@code NEITaczConfig}，实现 {@code codechicken.nei.api.IConfigureNEI}）——把上游 5 个 JEI 分类
+ * 逐个映射为 NEI {@code TemplateRecipeHandler}，并用 {@code API#setItemListEntries} 完成上游
+ * {@code registerItemSubtypes} 的子类型等价物。设计/验证清单见 {@code docs/review/r8/nei.md}。
+ * 本类继续保留，仅作为「上游 JEI 入口」的符号落点与探测逻辑，不参与 NEI 注册。
  */
 public final class GunModPlugin {
 

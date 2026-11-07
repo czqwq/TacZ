@@ -8,6 +8,7 @@ dependencies {
         attachManifestVersionToJar = false
     }
     implementation(gtnhDev("GTNHLib"))
+    implementation(gtnhDev("NotEnoughItems"))
     //implementation(gtnhDev("GT5-Unofficial"))
 
     // ---------------------------------------------------------------------------------------------
