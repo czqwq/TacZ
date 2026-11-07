@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.JsonToNBT;
 import net.minecraft.nbt.NBTBase;
@@ -21,8 +20,7 @@ import com.tacz.guns.GunMod;
 import com.tacz.guns.mcshim.GsonHelper;
 import com.tacz.guns.resource.CommonAssetsManager;
 import com.tacz.guns.resource.pojo.data.loot.LootTableInjection;
-
-import cpw.mods.fml.common.registry.GameRegistry;
+import com.tacz.guns.util.VanillaItemMapping;
 
 /**
  * 枪包战利品注入器（{@code data/<ns>/tacz_loot_injectors/*.json}）。
@@ -218,12 +216,12 @@ public final class LootTableInjectorModifier {
     @Nullable
     private static ItemStack buildStack(WeightedEntry entry) {
         ResourceLocation id = entry.itemId;
-        Item item = GameRegistry.findItem(id.getResourceDomain(), id.getResourcePath());
-        if (item == null) {
+        // 枪包战利品表写的是 1.20 扁平化物品 id → 先折算（1.7.10 注册名+damage），再查表
+        ItemStack stack = VanillaItemMapping.resolve(id.toString());
+        if (stack == null) {
             GunMod.LOGGER.warn("Loot injector references unknown item {}", id);
             return null;
         }
-        ItemStack stack = new ItemStack(item);
         if (entry.functions == null) {
             return stack;
         }

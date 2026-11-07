@@ -3697,3 +3697,47 @@ cam = (prev + d) + ((rotation + d) - (prev + d)) * partialTicks = lerp(prev, rot
   TACZ `client setup finished`，无新增 crash-report（见 r8/README.md「启动冒烟验证」）。
   实机视觉/交互回归清单见 r8/README.md，待用户确认。
 - 已知平台差异：方块模型无平滑 AO；旧存档已放置方块因 facing 编码修正会反向转一次；创造栏单包隐藏属可用性调整。
+
+### r8 追加 · 自定义枪包（2026-11-07，Lead）
+
+实机二轮反馈（zip 自定义枪包模型不渲染 / 语言键不翻译）修复后，同一轮日志又暴露两类问题：
+
+1. **受保护（加密）枪包不可用** —— `Tacz from Tarkov v1.1a` 的 `recursion/taczpack.dat`
+   是第三方前置 TACZ-Arcana 的资产保护容器（Arcana 公开源码明确不含该组件；release 用 obfuscated
+   `dist/**` + 原生库实现）。本移植 `GunPackLoader` 识别该标记后整包跳过并打一条明确 warn，
+   不再刷几百行贴图/模型/音效缺失。属枪包格式限制，非移植缺陷。记录：`docs/review/r8/gunpack.md` §3。
+2. **1.20 扁平化物品 id 解析** —— 新增 `util/VanillaItemMapping` 做 1.20.1 → 1.7.10
+   （注册名 + damage）等价折算；`OreDictionaryFallback#findItemStack`、`ItemStackJsonParser`、
+   `LootTableInjectorModifier` 统一接入；`GunSmithTableIngredient` 把「未知物品」从「整条配方跳过」
+   修正为上游语义（未知注册名 → AIR 材料：配方保留但无解）。记录：`docs/review/r8/gunpack.md` §4。
+3. 该轮 eft 枪包已移至 `tmp/eft-protected-pack/`（`tmp/` 被 gitignore，不随仓库分发），
+   待获得未加密版本后再验证。
+4. 构建自检：`./gradlew spotlessApply compileJava` = BUILD SUCCESSFUL（2026-11-07）。
+
+### r8 追加 · 枪械近战 / 后坐力实机反馈（2026-11-07，Lead）
+
+1. **Applied Armorer 近战枪 `special_melee_task_manager` 按 V 打怪无伤害（用户实机反馈）** —— ✅ **已定位并修复**：
+   - 静态复核 `MeleeKey` → `LocalPlayerMelee` → `ClientMessagePlayerMelee`（NetworkHandler id=24，收发两端一致）→
+     `LivingEntityMelee` → `AbstractGunItem#melee` → `ModernKineticGunItem#doMelee` 全部与上游 1.20.1 同构，
+     数据 `melee{ distance:3, cooldown:0.6, default{ melee_stock, distance:1, range_angle:30, damage:13, knockback:0.1, prep:0.15 } }` 正常；
+   - 为定位「客户端 / 网络 / 服务端任一步静默失败时表现完全相同」的问题，新增 **`/tacz debug true` 门控**的
+     `[TACZ Melee]` 诊断日志（客户端提前返回原因与分支、服务端前置判定值、候选实体距离/角度/可见性、
+     `attackEntityFrom` 返回值与掉血前后）。只在调试开关打开时输出，正常游戏无日志、**无行为改变**，
+     作为调试能力保留（上游无对应日志，属移植特有排查设施）。
+   - **实机日志定位到根因**：`server doMelee: distance=4.0, rangeAngle=30.0`、`candidates=7~10`，
+     但**所有候选（含玩家自己）的 degree 都是 121°~145°**（halfRangeAngle=15°）⇒ 锥形判定整体镜像。
+     根因是 **1.7.10 `Vec3#subtract` 是反向减法**：`a.subtract(b)` 返回 `b - a`
+     （`build/rfg/minecraft-src/java/net/minecraft/util/Vec3.java:55-61` javadoc 明确写
+     "Returns a new vector with the result of the specified vector minus this"）。
+     `doMelee` 照搬上游的 `userEye.subtract(eyeVec)` / `targetEye.subtract(centrePos)` 实际得到
+     `eyeVec - userEye` / `centrePos - targetEye` ⇒ 近战球心落到身前 8 格。
+   - **修复**：`ModernKineticGunItem#doMelee` 两处向量差改为按分量显式计算（`userEye - eyeVec`、`targetEye - centrePos`）；
+     同根因一并修复 `GunMeleeDebug#showRange`（调试火焰锥方向）与 `EntityUtil#getHitResult` 的 `hitBoxPos`
+     （爆头局部坐标反号 ⇒ 爆头 AABB / 默认眼高判定此前一直失效）。记录：`docs/review/r8/README.md`「追加（实机四轮）」#12/#14。
+2. **左键开火刷 `NumberIsTooSmallException: number of points (2)`**：Applied Armorer 该枪 `recoil.pitch/yaw`
+   只有 1 个关键帧（`GunRecoil` 补 `(0,0)` 后共 2 点，commons-math3 `SplineInterpolator` 要求 ≥3 点）。
+   上游 1.20.1 同文件同实现、同样不判长度 ⇒ 上游也会抛，属**枪包数据不合法**，不是移植缺陷；
+   异常被 Forge 事件总线捕获，仅日志刷屏 + 后坐力不生效。移植侧加防御：
+   `GunRecoil#getSplineFunction` 在 `keyFrames.length < 2` 时与空数组一样返回 `null`
+   （消费方 `CameraSetupEvent#applyCameraRecoil` 本就判空，合法数据行为不变）。记录：`docs/review/r8/README.md`「判定不是 bug」§4。
+3. 构建自检：`./gradlew spotlessApply compileJava` = BUILD SUCCESSFUL（2026-11-07）。

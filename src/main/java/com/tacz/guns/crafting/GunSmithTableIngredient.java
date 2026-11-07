@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -16,6 +18,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import com.tacz.guns.mcshim.GsonHelper;
+import com.tacz.guns.util.VanillaItemMapping;
 
 import cpw.mods.fml.common.registry.GameRegistry;
 
@@ -81,38 +84,57 @@ public class GunSmithTableIngredient {
      * 1.16+ 才有的原版物品 → 1.7.10 替代表（枪包 json 是按 1.20.1 写的）。
      *
      * <p>
-     * 默认枪包 199 条配方里有 11 条直接写了 1.7.10 不存在的物品 id，{@link #findItemStack} 返回 {@code null}
-     * 后本类抛 {@code JsonSyntaxException: Unknown item '...'} ⇒ 整条配方被跳过，这些配件在工作台里连列表都不出现：
-     * {@code crying_obsidian} ×6（ammo_mod_fmj/he/hp/i/overpressure_recoil/slug）、{@code shroomlight} ×3
-     * （scope_reap_ir / scope_xl50 / sight_infitac_fmp13）、{@code observer} ×3（scope_xl50 / scope_xm157 /
-     * sight_uh1）、{@code end_crystal} ×1（ammo_mod_he）、{@code copper_block} ×1（ammo_mod_slug）。
+     * 表值为 {@link VanillaItemMapping} 的描述格式（{@code "minecraft:<注册名>[#damage]"}），
+     * 解析走 {@link VanillaItemMapping#resolveSpec(String)}。
      *
      * <p>
-     * 替身取 1.7.10 原版里同名系 / 同功能类别的唯一物品：crying_obsidian → obsidian；shroomlight → glowstone
-     * （唯一的发光方块类材料）；observer → daylight_detector（唯一的光照探测元件，与光学配件语义最近）；
-     * end_crystal → ender_eye（物品形态是 1.9 才加的，同属末地系材料）；copper_block → iron_block（无铜，
-     * 同为「9 锭 = 1 块」的金属块）。
+     * 默认枪包 199 条配方里有 11 条直接写了 1.7.10 不存在的物品 id，不替换则整条配方材料恒不匹配；
+     * 这些配件在工作台里就永远做不出来：{@code crying_obsidian} ×6
+     * （ammo_mod_fmj/he/hp/i/overpressure_recoil/slug）、{@code shroomlight} ×3
+     * （scope_reap_ir / scope_xl50 / sight_infitac_fmp13）、{@code observer} ×3
+     * （scope_xl50 / scope_xm157 / sight_uh1）、{@code end_crystal} ×1（ammo_mod_he）、
+     * {@code copper_block} ×1（ammo_mod_slug）。
      *
      * <p>
-     * 与 {@link OreDictionaryFallback} 的分工：本表处理 {@code "item"} 字段里完全不存在的注册名（不替换就整条
-     * 配方加载失败），矿词侧由 {@code OreDictionaryFallback} 处理（不替换则配方能显示却永远做不出）。
+     * 第三方枪包（实测：芙宁娜枪包）另有 {netherite_ingot / netherite_scrap / netherite_sword /
+     * prismarine_shard} 等 1.13+ 物品。替身取 1.7.10 原版里同名系 / 同功能类别的唯一物品：
+     * crying_obsidian → obsidian；shroomlight → glowstone（唯一的发光方块类材料）；
+     * observer → daylight_detector（唯一的光照探测元件，与光学配件语义最近）；end_crystal → ender_eye
+     * （物品形态是 1.9 才加的，同属末地系材料）；copper_block → iron_block（无铜，同为「9 锭 = 1 块」的金属块）；
+     * netherite_ingot/netherite_scrap → gold_ingot（与 {@code OreDictionaryFallback} 的
+     * {@code ingotNetherite} → 金锭口径一致：下界合金的上游合成材料就是金锭）；
+     * netherite_sword → diamond_sword（同形态、低一档的剑）；prismarine_shard → quartz
+     * （与 {@code OreDictionaryFallback} 的 {@code gemAmethyst} → 石英口径一致：同属「非金属水晶碎片」）。
+     *
+     * <p>
+     * 与 {@link OreDictionaryFallback} 的分工：本表处理 {@code "item"} 字段里 1.7.10 完全不存在的注册名
+     * （不替换则材料无解），矿词侧由 {@code OreDictionaryFallback} 处理（不替换则配方能显示却永远做不出）。
      * <b>这是平台差异，不是上游语义</b>：替换只在原物品于 1.7.10 完全不存在时发生并记 debug 日志；
      * 若日后接入注册了这些物品的模组，{@link #findItemStack} 会优先命中原物品，本表自然失效。
      */
-    private static final Map<String, String> MISSING_VANILLA_ITEM_SUBSTITUTION = Map.of(
-        "minecraft:crying_obsidian",
-        "minecraft:obsidian",
-        "minecraft:shroomlight",
-        "minecraft:glowstone",
-        "minecraft:observer",
-        "minecraft:daylight_detector",
-        // 实机日志追加的两项（21:56 实测 environment 仍然缺）：
+    private static final Map<String, String> MISSING_VANILLA_ITEM_SUBSTITUTION = Map.ofEntries(
+        Map.entry("minecraft:crying_obsidian", "minecraft:obsidian"),
+        Map.entry("minecraft:shroomlight", "minecraft:glowstone"),
+        Map.entry("minecraft:observer", "minecraft:daylight_detector"),
+        // 实机日志追加（21:56 实测 environment 仍然缺）：
         // end_crystal 的**物品**是 1.9 才加的（1.7.10 只有 EntityEnderCrystal 实体）→ 用同族的末影之眼；
         // copper_block 在纯原版 1.7.10 不存在（GTNH 里由 GT 提供，但最小测试环境没有）→ 用铁块（同为「金属块」类材料）。
-        "minecraft:end_crystal",
-        "minecraft:ender_eye",
-        "minecraft:copper_block",
-        "minecraft:iron_block");
+        Map.entry("minecraft:end_crystal", "minecraft:ender_eye"),
+        Map.entry("minecraft:copper_block", "minecraft:iron_block"),
+        // 第三方枪包（芙宁娜 v0.2.8）实测：1.13+/1.16+ 物品。
+        Map.entry("minecraft:netherite_ingot", "minecraft:gold_ingot"),
+        Map.entry("minecraft:netherite_scrap", "minecraft:gold_ingot"),
+        Map.entry("minecraft:netherite_sword", "minecraft:diamond_sword"),
+        Map.entry("minecraft:prismarine_shard", "minecraft:quartz"));
+
+    /**
+     * 已经打过「材料在本环境不存在」debug 的物品 id。
+     *
+     * <p>
+     * 枪包解析在 {@code /tacz reload}、客户端网络快照重放时都会重跑；不去重则同一 id 每个重载刷一行。
+     * 用并发集合因为集成服与客户端两条解析路径理论上可能交错。
+     */
+    private static final Set<String> LOGGED_UNRESOLVABLE_ITEMS = ConcurrentHashMap.newKeySet();
 
     /** 代表物品（数量 1）；矿词材料且有候选时缓存第一个候选。 */
     @Nullable
@@ -128,6 +150,25 @@ public class GunSmithTableIngredient {
         }
         this.item = single(item);
         this.tag = null;
+        this.count = Math.max(1, count);
+    }
+
+    /**
+     * 「本环境不存在的材料」专用：材料解析为空（{@link #getMatchingStacks()} 返回空表、{@link #test} 恒
+     * {@code false}），但配方本身仍然登记。
+     *
+     * <p>
+     * 上游语义依据：{@code Ingredient.fromJson}
+     * （tmp/minecraft-src-1.20.1/src/main/java/net/minecraft/world/item/crafting/Ingredient.java:150-166）
+     * 的 item 分支走 {@code ShapedRecipe#itemFromJson} → {@code BuiltInRegistries.ITEM.get(id)}，
+     * <b>注册名不存在时返回默认值 AIR</b> 而不是抛异常 ⇒ 上游描述是「材料是空气的配方」：
+     * 配方能在配方书/工作台列表里看到，但永远凑不齐材料。移植早期直接抛
+     * {@code JsonSyntaxException} 跳过整条配方，与上游语义不一致（第三方枪包引用自身未安装的附属模组
+     * 物品时会整条消失），故对齐成「登记但无解」。
+     */
+    private GunSmithTableIngredient(@Nullable ItemStack item, @Nullable String tag, int count) {
+        this.item = item == null ? null : single(item);
+        this.tag = tag;
         this.count = Math.max(1, count);
     }
 
@@ -174,12 +215,14 @@ public class GunSmithTableIngredient {
             JsonElement itemElement = object.get(ITEM);
             String itemName = itemElement.isJsonPrimitive() ? itemElement.getAsString()
                 : GsonHelper.getAsString(itemElement.getAsJsonObject(), ITEM);
+            // 1.20 枪包用的是扁平化物品 id（minecraft:blue_dye 等），findItemStack 内部会先过
+            // VanillaItemMapping 折算成 1.7.10 注册名 + damage
             ItemStack stack = findItemStack(itemName);
             if (stack == null) {
                 // 1.16+ 原版物品在 1.7.10 不存在 → 用登记过的替身（见 MISSING_VANILLA_ITEM_SUBSTITUTION）
-                String substitute = MISSING_VANILLA_ITEM_SUBSTITUTION.get(itemName);
+                String substitute = MISSING_VANILLA_ITEM_SUBSTITUTION.get(VanillaItemMapping.normalize(itemName));
                 if (substitute != null) {
-                    stack = findItemStack(substitute);
+                    stack = VanillaItemMapping.resolveSpec(substitute);
                     if (stack != null) {
                         LogManager.getLogger("TACZ")
                             .debug(
@@ -190,7 +233,17 @@ public class GunSmithTableIngredient {
                 }
             }
             if (stack == null) {
-                throw new JsonSyntaxException("Unknown item '" + itemName + "'");
+                // 上游把「注册名不存在」解析成 AIR 材料（见私有构造器注释）→ 这里同样保留配方、材料无解；
+                // 只打一条 debug 说明原因，避免像默认包早期那样整条配方被跳过。
+                String normalized = VanillaItemMapping.normalize(itemName);
+                if (LOGGED_UNRESOLVABLE_ITEMS.add(normalized)) {
+                    LogManager.getLogger("TACZ")
+                        .debug(
+                            "[TACZ] recipe ingredient {} does not exist in this environment; keeping the recipe with an"
+                                + " unresolvable material (upstream resolves unknown items to AIR)",
+                            normalized);
+                }
+                return new GunSmithTableIngredient(null, null, count);
             }
             return new GunSmithTableIngredient(stack, count);
         }

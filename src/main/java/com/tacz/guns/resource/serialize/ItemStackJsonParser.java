@@ -1,6 +1,5 @@
 package com.tacz.guns.resource.serialize;
 
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.JsonToNBT;
 import net.minecraft.nbt.NBTBase;
@@ -13,8 +12,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import com.tacz.guns.mcshim.GsonHelper;
-
-import cpw.mods.fml.common.registry.GameRegistry;
+import com.tacz.guns.util.VanillaItemMapping;
 
 /**
  * 把上游 1.20 的物品 json 描述（{@code {"item":"ns:path","count":N,"nbt":{...}}}）解析成 1.7.10 的
@@ -27,8 +25,9 @@ import cpw.mods.fml.common.registry.GameRegistry;
  *
  * <p>
  * <b>1.7.10 差异</b>：1.7.10 的 Forge 没有 {@code CraftingHelper}，也没有
- * {@code Ingredient}/{@code ForgeRegistries}，物品只能按 {@code GameRegistry.findItem(domain, path)} 查。
- * 这里实现最小子集：{@code item} 字段走注册名查表，{@code count} 与 {@code nbt} 可缺省。
+ * {@code Ingredient}/{@code ForgeRegistries}，物品只能按注册名查。这里实现最小子集：{@code item} 字段先经
+ * {@link VanillaItemMapping#resolve(String)} 做 1.20 扁平化 id → 1.7.10 注册名（+damage）的等价折算，
+ * 再查表；{@code count} 与 {@code nbt} 可缺省。
  * <b>不支持</b>上游的 {@code tag}（ore dictionary）写法——那部分由
  * {@code com.tacz.guns.crafting#GunSmithTableIngredient} 自行处理（见 docs/PORT_STATUS.md 跨包契约）。
  */
@@ -54,11 +53,11 @@ public final class ItemStackJsonParser {
 
     /** 按注册名取 {@link ItemStack}，物品不存在返回 {@code null}。 */
     public static @Nullable ItemStack getItemStack(ResourceLocation itemId, @Nullable JsonElement nbt) {
-        Item item = GameRegistry.findItem(itemId.getResourceDomain(), itemId.getResourcePath());
-        if (item == null) {
+        // 1.20 枪包写的是扁平化后的 id（minecraft:blue_dye 等），先经 VanillaItemMapping 折算成 1.7.10 注册名
+        ItemStack stack = VanillaItemMapping.resolve(itemId.toString());
+        if (stack == null) {
             return null;
         }
-        ItemStack stack = new ItemStack(item);
         if (nbt != null && nbt.isJsonObject()) {
             try {
                 NBTBase tag = JsonToNBT.func_150315_a(nbt.toString());

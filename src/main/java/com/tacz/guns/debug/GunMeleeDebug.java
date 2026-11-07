@@ -35,7 +35,12 @@ public class GunMeleeDebug {
                         startPos.xCoord + i / 2.0,
                         startPos.yCoord + j / 2.0,
                         startPos.zCoord + k / 2.0);
-                    Vec3 targetVec = tmpPos.subtract(centrePos);
+                    // 1.7.10 的 Vec3#subtract 是反向减法（a.subtract(b) = b - a），
+                    // 上游 tmpPos - centrePos 这里按分量写，避免同 doMelee 的镜像错误
+                    Vec3 targetVec = Vec3.createVectorHelper(
+                        tmpPos.xCoord - centrePos.xCoord,
+                        tmpPos.yCoord - centrePos.yCoord,
+                        tmpPos.zCoord - centrePos.zCoord);
                     double targetLength = targetVec.lengthVector();
                     if (targetLength < distance) {
                         continue;

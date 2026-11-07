@@ -61,6 +61,19 @@ public class GunRecoil {
         if (keyFrames == null || keyFrames.length == 0) {
             return null;
         }
+        // 移植补充（对非法枪包数据的防御，不改变合法数据的语义）：
+        // 本方法会先补一个 (time=0, value=0) 的点，因此样条点数 = keyFrames.length + 1；
+        // commons-math3 的 SplineInterpolator.interpolate 要求点数 >= 3，只有 1 个关键帧时
+        // 上游（1.20.1 同文件同实现）会在 CameraSetupEvent#initialCameraRecoil 里抛
+        // NumberIsTooSmallException: number of points (2)，被 Forge 事件总线记为
+        // "Exception caught during firing event GunFireEvent"（后坐力完全不生效）。
+        // 1 帧后坐力无法构成曲线，语义上等同于「没有后坐力数据」，故与空数组一样返回 null；
+        // 消费方 CameraSetupEvent#applyCameraRecoil 已判空（同上游）。
+        // 实测数据：Applied Armorer 的 special_melee_task_manager 的 recoil.pitch / recoil.yaw
+        // 各只有 {"time":0,"value":[0,0]} —— 见 docs/review/r8/README.md。
+        if (keyFrames.length < 2) {
+            return null;
+        }
         double[] values = new double[keyFrames.length + 1];
         double[] times = new double[keyFrames.length + 1];
         times[0] = 0;

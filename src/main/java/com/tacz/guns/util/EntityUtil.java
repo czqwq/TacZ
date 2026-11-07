@@ -159,7 +159,11 @@ public class EntityUtil {
         if (hitPos == null) {
             return null;
         }
-        Vec3 hitBoxPos = hitPos.subtract(Vec3.createVectorHelper(entity.posX, entity.posY, entity.posZ));
+        // 1.7.10 的 a.subtract(b) = b - a（Vec3.java:55-61 反向减法），这里要的是
+        // 「命中点相对实体脚底」= hitPos - entityPosition；直接写 hitPos.subtract(entityPos)
+        // 会得到反号坐标，爆头 AABB / 默认眼高判定全部失效（这是移植时踩过的语义坑）。
+        Vec3 hitBoxPos = Vec3
+            .createVectorHelper(hitPos.xCoord - entity.posX, hitPos.yCoord - entity.posY, hitPos.zCoord - entity.posZ);
         // 有配置的调用配置（1.20 风格 id 与 1.7.10 旧形态都查）
         for (String entityId : EntityIdHelper.getConfigCandidates(entity)) {
             AxisAlignedBB aabb = HeadShotAABBConfigRead.getAABB(entityId);

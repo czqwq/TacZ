@@ -14,6 +14,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -88,6 +90,28 @@ public enum GunPackLoader {
 
     /** 枪包安装目录名，位于游戏根目录下（对应上游 {@code FMLPaths.GAMEDIR.get().resolve("tacz")}）。 */
     public static final String PACK_DIR_NAME = "tacz";
+
+    /**
+     * 「受保护（加密）枪包」的标记文件路径。
+     *
+     * <p>
+     * 上游 1.20.1 的 TACZ 本体<b>没有</b>资产保护/加密能力：加密枪包由第三方附属模组
+     * TACZ-Arcana（https://github.com/Hamster-Baron/TACZ-Arcana）在运行时解密后并入枪包视图，
+     * 其 release jar 把该能力放在 obfuscated {@code group/taczexpands/dist/**} + 原生库
+     * （{@code META-INF/natives/native_*_x86_64.*}）里，并明确说明公开源码
+     * 「不具备加载封装拓展资源包（Gunpack）的能力」（README「Notice / 须知」段）。
+     * 因此 1.7.10 移植无法读取这类枪包：其 {@code assets/**} 与模型/贴图全部在
+     * {@code recursion/taczpack.dat} 这个加密容器里，明文只有 {@code data/**} 索引与语言文件。
+     *
+     * <p>
+     * 行为：扫描阶段识别到标记文件就<b>整包跳过</b>并只打一条 warn —— 不跳过的话表现为
+     * 一百多个物品进入创造模式但全部没有模型/贴图（{@code there is no corresponding model file} /
+     * {@code Failed to load texture: <ns>:textures/...}），几百行报错淹没真正的问题。
+     */
+    public static final String PROTECTED_PACK_MARKER = "recursion/taczpack.dat";
+
+    /** 已经警告过的受保护枪包名（{@code /tacz reload} 会重扫目录，避免重复刷同一条警告）。 */
+    private static final Set<String> WARNED_PROTECTED_PACKS = ConcurrentHashMap.newKeySet();
 
     /**
      * 作用侧。上游在 {@code GunMod} 构造器里按 {@code Dist} 赋值，1.7.10 保留同名字段以对齐调用点，
@@ -564,6 +588,12 @@ public enum GunPackLoader {
     }
 
     private static @Nullable GunPack fromDirPath(Path path) {
+        if (Files.isRegularFile(path.resolve(PROTECTED_PACK_MARKER))) {
+            warnProtectedPack(
+                path.getFileName()
+                    .toString());
+            return null;
+        }
         Path packInfoFilePath = path.resolve("gunpack.meta.json");
         try (InputStream stream = Files.newInputStream(packInfoFilePath)) {
             PackMeta info = CommonAssetsManager.GSON
@@ -589,6 +619,12 @@ public enum GunPackLoader {
 
     private static @Nullable GunPack fromZipPath(Path path) {
         try (ZipFile zipFile = new ZipFile(path.toFile())) {
+            if (zipFile.getEntry(PROTECTED_PACK_MARKER) != null) {
+                warnProtectedPack(
+                    path.getFileName()
+                        .toString());
+                return null;
+            }
             ZipEntry extDescriptorEntry = zipFile.getEntry("gunpack.meta.json");
             if (extDescriptorEntry == null) {
                 GunMod.LOGGER.error(
@@ -623,6 +659,23 @@ public enum GunPackLoader {
             GunMod.LOGGER
                 .error(MARKER, "Failed to load extension from ZIP {}. Error: {}", path.getFileName(), exception);
             return null;
+        }
+    }
+
+    /**
+     * 受保护枪包只警告一次（同名包在每次 {@code /tacz reload} 重扫时都会再次命中，但日志只应出现一次）。
+     *
+     * @see #PROTECTED_PACK_MARKER 为什么 1.7.10 无法支持这类枪包
+     */
+    private static void warnProtectedPack(String packName) {
+        if (WARNED_PROTECTED_PACKS.add(packName)) {
+            GunMod.LOGGER.warn(
+                MARKER,
+                "[TACZ] Gun pack '{}' is a protected/encrypted pack ({}). TaCZ 1.20.1 itself cannot read it either:"
+                    + " it requires TaCZ-Arcana's closed-source asset-protection component (obfuscated + native),"
+                    + " which is not available on 1.7.10. Pack skipped; please use an unprotected version.",
+                packName,
+                PROTECTED_PACK_MARKER);
         }
     }
 

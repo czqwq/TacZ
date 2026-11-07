@@ -600,9 +600,31 @@ public class ModernKineticGunItem extends AbstractGunItem implements GunItemData
         eyeVec = eyeVec.normalize();
         eyeVec = Vec3.createVectorHelper(eyeVec.xCoord * distance, eyeVec.yCoord * distance, eyeVec.zCoord * distance);
         Vec3 userEye = Vec3.createVectorHelper(user.posX, user.posY + user.getEyeHeight(), user.posZ);
-        Vec3 centrePos = userEye.subtract(eyeVec);
+        // 注意 1.7.10 的 Vec3#subtract 是「反向减法」：a.subtract(b) 返回 b - a
+        // （build/rfg/minecraft-src/java/net/minecraft/util/Vec3.java:55-61 的 javadoc：
+        // "Returns a new vector with the result of the specified vector minus this"）。
+        // 上游 1.20.1 是 user.getEyePosition().subtract(eyeVec)（= userEye - eyeVec），
+        // 因此这里直接按分量写，避免误用反向减法：一旦写成 userEye.subtract(eyeVec)，
+        // 球心会落到身前 8 格，整个锥形判定反向 —— 这正是「按 V 打怪时所有 candidate 的
+        // degree 在 121°~145° 被拒、没有任何伤害」的根因（见 docs/review/r8/README.md「实机四轮」）。
+        Vec3 centrePos = Vec3.createVectorHelper(
+            userEye.xCoord - eyeVec.xCoord,
+            userEye.yCoord - eyeVec.yCoord,
+            userEye.zCoord - eyeVec.zCoord);
         List<?> entityList = user.worldObj
             .getEntitiesWithinAABB(EntityLivingBase.class, user.boundingBox.expand(distance, distance, distance));
+        if (DebugCommand.DEBUG) {
+            // 移植特有的实机排查日志（上游无对应输出）：只在使用 /tacz debug true 时打印。
+            GunMod.LOGGER.info(
+                "[TACZ Melee] server doMelee: gunDistance={}, meleeDistance={}, distance={}, rangeAngle={}, damage={}, knockback={}, candidates={}",
+                gunDistance,
+                meleeDistance,
+                distance,
+                rangeAngle,
+                damage,
+                knockback,
+                entityList.size());
+        }
         com.google.common.base.Supplier<Float> realDamage = Suppliers.memoize(() -> {
             IAttributeInstance instance = user.getEntityAttribute(SharedMonsterAttributes.attackDamage);
             if (instance == null) {
@@ -624,16 +646,36 @@ public class ModernKineticGunItem extends AbstractGunItem implements GunItemData
                 continue;
             }
             Vec3 targetEye = Vec3.createVectorHelper(living.posX, living.posY + living.getEyeHeight(), living.posZ);
-            Vec3 targetVec = targetEye.subtract(centrePos);
+            // 同上：上游 targetEye - centrePos；1.7.10 的 Vec3#subtract 反号，故按分量写。
+            Vec3 targetVec = Vec3.createVectorHelper(
+                targetEye.xCoord - centrePos.xCoord,
+                targetEye.yCoord - centrePos.yCoord,
+                targetEye.zCoord - centrePos.zCoord);
             double targetLength = targetVec.lengthVector();
             if (targetLength < distance) {
                 continue;
             }
             double degree = Math.toDegrees(Math.acos(targetVec.dotProduct(eyeVec) / (targetLength * distance)));
             if (degree < (rangeAngle / 2)) {
-                if (user.canEntityBeSeen(living)) {
+                boolean seen = user.canEntityBeSeen(living);
+                if (DebugCommand.DEBUG) {
+                    GunMod.LOGGER.info(
+                        "[TACZ Melee] candidate {}: targetLength={}, degree={} (halfRangeAngle={}), canEntityBeSeen={}",
+                        living,
+                        targetLength,
+                        degree,
+                        rangeAngle / 2,
+                        seen);
+                }
+                if (seen) {
                     doPerLivingHurt(user, living, knockback, realDamage.get(), effects);
                 }
+            } else if (DebugCommand.DEBUG) {
+                GunMod.LOGGER.info(
+                    "[TACZ Melee] candidate {} rejected: degree={} >= halfRangeAngle={}",
+                    living,
+                    degree,
+                    rangeAngle / 2);
             }
         }
 
@@ -665,10 +707,20 @@ public class ModernKineticGunItem extends AbstractGunItem implements GunItemData
             target.motionY = target.onGround ? Math.min(0.4D, target.motionY / 2.0D + strength) : target.motionY;
             target.motionZ = target.motionZ / 2.0D - zd * strength;
         }
+        boolean hurtAccepted;
         if (user instanceof EntityPlayer player) {
-            target.attackEntityFrom(DamageSource.causePlayerDamage(player), damage);
+            hurtAccepted = target.attackEntityFrom(DamageSource.causePlayerDamage(player), damage);
         } else {
-            target.attackEntityFrom(DamageSource.causeMobDamage(user), damage);
+            hurtAccepted = target.attackEntityFrom(DamageSource.causeMobDamage(user), damage);
+        }
+        if (DebugCommand.DEBUG) {
+            // 移植特有排查日志：attackEntityFrom 返回 false 表示伤害被目标（或事件监听器）拒绝
+            GunMod.LOGGER.info(
+                "[TACZ Melee] hurt target {}: damage={}, accepted={}, healthAfter={}",
+                target,
+                damage,
+                hurtAccepted,
+                target.getHealth());
         }
         // 上游 user.doEnchantDamageEffects(user, target)（1.8+ Forge API）在 1.7.10 的等价物就是原版
         // EntityPlayer#attackTargetEntityWithCurrentItem 里的这两行（EntityPlayer.java:1417-1420）：

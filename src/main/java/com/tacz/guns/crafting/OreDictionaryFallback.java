@@ -5,13 +5,14 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.oredict.OreDictionary;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
+
+import com.tacz.guns.util.VanillaItemMapping;
 
 import cpw.mods.fml.common.registry.GameRegistry;
 
@@ -187,17 +188,13 @@ public final class OreDictionaryFallback {
      * 按注册名取物品（1.7.10 无 {@code ForgeRegistries}，用 {@link GameRegistry#findItem}）。
      *
      * <p>
-     * 方块的物品形态同样命中：{@code Item.registerItems()}
-     * （{@code build/rfg/minecraft-src/java/net/minecraft/item/Item.java:277-424}）按<b>方块注册名</b>
-     * 为每个方块登记了 ItemBlock（{@code itemRegistry.addObject(Block.getIdFromBlock(block), s, object)}），
+     * 1.20 枪包写的是扁平化后的物品 id（{@code minecraft:oak_planks} 等），因此这里统一委托
+     * {@link VanillaItemMapping#resolve(String)}：先做 1.20 → 1.7.10 的等价折算，再按注册名查表。
+     * 方块的物品形态同样命中（{@code Item.registerItems()} 会为每个方块登记 ItemBlock），
      * 所以 {@code minecraft:wool} / {@code minecraft:planks} 这类「tag 直接等于方块名」的写法也能解析。
      */
     @Nullable
     public static ItemStack findItemStack(String registryName) {
-        int colon = registryName.indexOf(':');
-        String domain = colon < 0 ? "minecraft" : registryName.substring(0, colon);
-        String path = colon < 0 ? registryName : registryName.substring(colon + 1);
-        Item item = GameRegistry.findItem(domain, path);
-        return item == null ? null : new ItemStack(item);
+        return VanillaItemMapping.resolve(registryName);
     }
 }

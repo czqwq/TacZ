@@ -9,12 +9,14 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.common.MinecraftForge;
 
+import com.tacz.guns.GunMod;
 import com.tacz.guns.api.DefaultAssets;
 import com.tacz.guns.api.TimelessAPI;
 import com.tacz.guns.api.event.common.GunMeleeEvent;
 import com.tacz.guns.api.item.IGun;
 import com.tacz.guns.api.item.attachment.AttachmentType;
 import com.tacz.guns.api.item.gun.AbstractGunItem;
+import com.tacz.guns.command.sub.DebugCommand;
 import com.tacz.guns.network.NetworkHandler;
 import com.tacz.guns.network.message.event.ServerMessageGunMelee;
 import com.tacz.guns.resource.index.CommonGunIndex;
@@ -55,22 +57,28 @@ public class LivingEntityMelee {
         // 1.7.10：Supplier#get() 可能返回 null（空手），用 getCurrentGunItem() 归一化后判空。
         ItemStack currentGunItem = data.getCurrentGunItem();
         if (currentGunItem == null) {
+            debugLog("server stop: currentGunItem is null");
             return;
         }
         // 检查是否在切枪
-        if (draw.getDrawCoolDown() != 0) {
+        long drawCoolDown = draw.getDrawCoolDown();
+        if (drawCoolDown != 0) {
+            debugLog("server stop: drawing (drawCoolDown={})", drawCoolDown);
             return;
         }
         // 检查是否在拉栓
         if (data.isBolting) {
+            debugLog("server stop: bolting");
             return;
         }
         long coolDown = getMeleeCoolDown();
         if (coolDown != 0) {
+            debugLog("server stop: melee cool down {}", coolDown);
             return;
         }
         // 触发近战事件
         if (MinecraftForge.EVENT_BUS.post(new GunMeleeEvent(shooter, currentGunItem, Side.SERVER))) {
+            debugLog("server stop: GunMeleeEvent canceled on SERVER");
             return;
         }
         NetworkHandler.sendToTrackingEntity(new ServerMessageGunMelee(shooter.getEntityId(), currentGunItem), shooter);
@@ -82,6 +90,7 @@ public class LivingEntityMelee {
             if (muzzleMeleeData != null) {
                 float prepTime = muzzleMeleeData.getPrepTime();
                 data.meleePrepTickCount = (int) Math.max(0, prepTime * 20);
+                debugLog("server branch: muzzle melee, prepTicks={}", data.meleePrepTickCount);
                 return;
             }
 
@@ -90,27 +99,40 @@ public class LivingEntityMelee {
             if (stockMeleeData != null) {
                 float prepTime = stockMeleeData.getPrepTime();
                 data.meleePrepTickCount = (int) Math.max(0, prepTime * 20);
+                debugLog("server branch: stock melee, prepTicks={}", data.meleePrepTickCount);
                 return;
             }
 
             ResourceLocation gunId = logicGun.getGunId(currentGunItem);
             TimelessAPI.getCommonGunIndex(gunId)
-                .ifPresent(index -> {
+                .ifPresentOrElse(index -> {
                     GunDefaultMeleeData defaultMeleeData = index.getGunData()
                         .getMeleeData()
                         .getDefaultMeleeData();
                     if (defaultMeleeData == null) {
+                        debugLog("server stop: {} has no default melee data", gunId);
                         return;
                     }
                     float prepTime = defaultMeleeData.getPrepTime();
                     data.meleePrepTickCount = (int) Math.max(0, prepTime * 20);
-                });
+                    debugLog(
+                        "server branch: default melee ({}), damage={}, distance={}, rangeAngle={}, knockback={}, prepTicks={}",
+                        gunId,
+                        defaultMeleeData.getDamage(),
+                        defaultMeleeData.getDistance(),
+                        defaultMeleeData.getRangeAngle(),
+                        defaultMeleeData.getKnockback(),
+                        data.meleePrepTickCount);
+                }, () -> debugLog("server stop: gun index for {} is missing on server", gunId));
+        } else {
+            debugLog("server stop: held item is not an AbstractGunItem");
         }
     }
 
     public void scheduleTickMelee() {
         if (this.data.meleePrepTickCount > 0) {
             this.data.meleePrepTickCount--;
+            debugLog("server tick_melee: prep countdown -> {}", this.data.meleePrepTickCount);
             return;
         }
         if (this.data.meleePrepTickCount == 0) {
@@ -118,10 +140,14 @@ public class LivingEntityMelee {
             // 1.7.10：空手时 getCurrentGunItem() 返回 null（上游为 ItemStack.EMPTY）
             ItemStack currentGunItem = data.getCurrentGunItem();
             if (currentGunItem == null) {
+                debugLog("server tick_melee: fire skipped, currentGunItem is null");
                 return;
             }
             if (currentGunItem.getItem() instanceof AbstractGunItem logicGun) {
+                debugLog("server tick_melee: firing doMelee for {}", logicGun.getGunId(currentGunItem));
                 logicGun.melee(data, this.shooter, currentGunItem);
+            } else {
+                debugLog("server tick_melee: fire skipped, held item is not an AbstractGunItem");
             }
         }
     }
@@ -181,5 +207,19 @@ public class LivingEntityMelee {
                 index -> index.getData()
                     .getMeleeData())
             .orElse(null);
+    }
+
+    /**
+     * 近战链路诊断日志，仅在 {@code /tacz debug true} 时输出。
+     *
+     * <p>
+     * 移植特有：上游没有近战调试输出，{@code /tacz debug} 上游只用于近战范围粒子与靶板压测；
+     * 这里补「服务端在哪一步拒绝 / 走了哪条分支」的日志，便于实机定位「按 V 没伤害」这类
+     * 客户端、网络、服务端表现完全一样的问题（见 docs/review/r8/README.md）。
+     */
+    private static void debugLog(String format, Object... args) {
+        if (DebugCommand.DEBUG) {
+            GunMod.LOGGER.info("[TACZ Melee] " + format, args);
+        }
     }
 }
