@@ -7,7 +7,7 @@ dependencies {
         // 是否自动为输出的jar添加 `gtnhVersion` 后缀
         attachManifestVersionToJar = false
     }
-    implementation(gtnhDev("GTNHLib"))
+    implementation(gtnhDev("GTNHLib")) { transitive = false }
     implementation(gtnhDev("NotEnoughItems"))
     //implementation(gtnhDev("GT5-Unofficial"))
 
