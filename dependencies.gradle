@@ -7,7 +7,7 @@ dependencies {
         // 是否自动为输出的jar添加 `gtnhVersion` 后缀
         attachManifestVersionToJar = false
     }
-    compileOnly(gtnhDev("GTNHLib"))
+    runtimeOnlyNonPublishable(gtnhDev("GTNHLib"))
     implementation(gtnhDev("NotEnoughItems"))
     //implementation(gtnhDev("GT5-Unofficial"))
 
